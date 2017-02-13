@@ -31,6 +31,7 @@ using namespace std;
 using glm::vec3;
 using glm::mat3;*/
 
+typedef size_t uint;
 
 using namespace std;
 using glm::vec3;
@@ -45,7 +46,7 @@ const int SCREEN_WIDTH = 500;
 const int SCREEN_HEIGHT = 500;
 SDL_Surface* screen;
 int t;
-glm::vec3 campos(0.0, 0.0, -2.0);
+glm::vec3 campos(0.0, 0.0, -1.0);
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
@@ -67,7 +68,8 @@ int main( int argc, char* argv[] )
     model::Scene scene;
     scene.addTriangles(model);
 
-
+    Update();
+    Draw(scene);
 	while( NoQuitMessageSDL() )
 	{
 		Update();
@@ -148,7 +150,14 @@ void Draw(model::Scene& scene)
         vec2 projpos0 = project2D(t.v0);
         vec2 projpos1 = project2D(t.v1);
         vec2 projpos2 = project2D(t.v2);
-        std::vector<ivec2> lineA( (int)glm::length(projpos1-projpos0) ), lineB((int)glm::length(projpos2 - projpos0)), lineC((int)glm::length(projpos2 - projpos1));
+
+        const float max_draw_length = 100.0f;
+        uint a_ = min((uint)glm::length(projpos1 - projpos0), (uint)max_draw_length);
+        uint b_ = min((uint)glm::length(projpos2 - projpos0), (uint)max_draw_length);
+        uint c_ = min((uint)glm::length(projpos2 - projpos1), (uint)max_draw_length);
+        std::vector<ivec2> lineA( a_ ), lineB( b_ ), lineC( c_ );
+
+        //Interpolates between 2 points such that all points are on screen
         Interpolate(projpos0, projpos1, lineA);
         Interpolate(projpos0, projpos2, lineB);
         Interpolate(projpos1, projpos2, lineC);
@@ -188,9 +197,16 @@ glm::vec2 project2D(glm::vec3 point) {
     return screen_space_pos;
 }
 
+inline bool isNotOnScreen(glm::ivec2 p) {
+    return p.x < 0 || p.x > SCREEN_WIDTH || p.y < 0 || p.y > SCREEN_HEIGHT;
+}
+
 void Interpolate(glm::ivec2 a, glm::ivec2 b, vector<glm::ivec2>& result) {
+    //Adjust a and b to be on line between them and the nearest on-screen point to their original position
+    vec2 d = b - a;
+
     int N = result.size();
-    vec2 step = vec2(b - a) / float(max(N - 1, 1));
+    vec2 step = d / float(max(N - 1, 1));
     vec2 current(a);
     for (int i = 0; i<N; ++i) {
         result[i] = current;

@@ -26,6 +26,15 @@ extern "C" FILE * __cdecl __iob_func(void) {
 }
 #endif
 
+struct Pixel {
+    //Core pixel data
+    uint8_t r, g, b, a;
+    unsigned short x, y;
+
+    //Extended pixel data for rasterizer use (z-buffer etc...)
+    //...
+};
+
 /*
 using namespace std;
 using glm::vec3;

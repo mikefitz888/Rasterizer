@@ -1,4 +1,4 @@
-#include <iostream>
+/*#include <iostream>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -45,7 +45,7 @@ using glm::mat3;*/
 /* ----------------------------------------------------------------------------*/
 /* GLOBAL VARIABLES                                                            */
 
-const int SCREEN_WIDTH = 500;
+/*const int SCREEN_WIDTH = 500;
 const int SCREEN_HEIGHT = 500;
 SDL_Surface* screen;
 bitmap_image *texture;
@@ -55,7 +55,7 @@ int t;
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
 
-void Update();
+/*void Update();
 void Draw(model::Scene scene, photonmap::PhotonMap& photon_map);
 glm::vec3 Trace(std::vector<Triangle>& triangles, glm::vec3 cameraPos, glm::vec3 direction, photonmap::PhotonMap& photon_map, model::Scene& scene);
 
@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
 		std::cin >> a;
         return 0;*/
 
-	while( NoQuitMessageSDL() )
+	/*while( NoQuitMessageSDL() )
 	{
 		Update();
 		//Draw(cornell_box.getFaces());
@@ -194,7 +194,7 @@ void Draw(model::Scene scene, photonmap::PhotonMap& photon_map) {
 	- Loosely based off of https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-generating-camera-rays/generating-camera-rays
 	- Same principle as Pinhole, except re-scaled such that the xScr, yScr are in camera-space.
 	*/
-	float fovFactor = tan(M_PI * (fov*0.5) / 180);
+	/*float fovFactor = tan(M_PI * (fov*0.5) / 180);
 
 	float x_rotation = 0.5f;
 	float y_rotation = 0.0f;
@@ -301,7 +301,7 @@ glm::vec3 Trace( std::vector<Triangle>& triangles, glm::vec3 cameraPos, glm::vec
 				between them, we can also give each vertex a uv coordinate (mapping to texture space) and use this same
 				math to map each point within a triangle to the correct point in uv-space.
 		*/
-		Triangle t = triangles[closest_intersect.index];
+		/*Triangle t = triangles[closest_intersect.index];
 		glm::vec3 barycentric_coords = t.calculateBarycentricCoordinates(closest_intersect.position);
 		
 		glm::vec2 baseColourUV = t.uv0*barycentric_coords.x + t.uv1*barycentric_coords.y + t.uv2*barycentric_coords.z;

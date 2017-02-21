@@ -3,9 +3,14 @@
 #ifndef SDL_AUXILIARY_H
 #define SDL_AUXILIARY_H
 
+
 #include "SDL.h"
 #include <iostream>
 #include <glm/glm.hpp>
+#include <CL/cl.hpp>
+
+const int SCREEN_WIDTH = 500;
+const int SCREEN_HEIGHT = 500;
 
 // Initializes SDL (video and timer). SDL creates a window where you can draw.
 // A pointer to this SDL_Surface is returned. After calling this function
@@ -59,6 +64,14 @@ bool NoQuitMessageSDL() {
 				return false;
 	}
 	return true;
+}
+
+void renderBuffer(SDL_Surface* surface) {
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            //PutPixelSDL(surface, x, y, getPixelColor(x, y));
+        }
+    }
 }
 
 // TODO: Does this work on all platforms?

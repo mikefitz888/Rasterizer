@@ -95,7 +95,7 @@ namespace model {
 			if (modified) {
 				modified = false;
 				triangles.clear();
-				for (int i = 0; i < vertexIndices.size(); i += 3) {
+				for (unsigned int i = 0; i < vertexIndices.size(); i += 3) {
 					triangles.emplace_back(
 						vertices[vertexIndices[i]],
 						vertices[vertexIndices[i + 1]],

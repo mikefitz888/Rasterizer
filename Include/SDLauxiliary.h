@@ -7,10 +7,7 @@
 #include "SDL.h"
 #include <iostream>
 #include <glm/glm.hpp>
-#include <CL/cl.hpp>
-
-const int SCREEN_WIDTH = 500;
-const int SCREEN_HEIGHT = 500;
+#include "Triangle.h"
 
 // Initializes SDL (video and timer). SDL creates a window where you can draw.
 // A pointer to this SDL_Surface is returned. After calling this function
@@ -76,15 +73,13 @@ void renderBuffer(SDL_Surface* surface) {
 
 // TODO: Does this work on all platforms?
 void PutPixelSDL(SDL_Surface* surface, int x, int y, glm::vec3 color) {
-	if (x < 0 || surface->w <= x || y < 0 || surface->h <= y)
-		return;
-
-	Uint8 r = Uint8(glm::clamp(255 * color.r, 0.f, 255.f));
-	Uint8 g = Uint8(glm::clamp(255 * color.g, 0.f, 255.f));
-	Uint8 b = Uint8(glm::clamp(255 * color.b, 0.f, 255.f));
-
+    if (x < 0 || surface->w <= x || y < 0 || surface->h <= y) {
+        printf("Out Of Bounds\n");
+        return;
+    }
+    
 	Uint32* p = (Uint32*)surface->pixels + y*surface->pitch / 4 + x;
-	*p = SDL_MapRGB(surface->format, r, g, b);
+	*p = SDL_MapRGB(surface->format, color.r, color.g, color.b);
 }
 
 glm::vec3 GetPixelSDL(SDL_Surface* surface, int x, int y) {

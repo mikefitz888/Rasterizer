@@ -3,17 +3,16 @@
 #endif
 
 #include <vector>
-#include <glm/glm.hpp>
-#include <glm/gtx/rotate_vector.hpp>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #undef size_t
 #include <SDL.h>
+#include "../Include/SDLauxiliary.h"
 #undef main
-#include "../Include/RenderUtil.hpp"
+#include "../Include/RenderUtil.h"
 
 #include "../Include/TestModel.h"
-#include "../Include/Raytracer.h"
+
 #include "../Include/ModelLoader.h"
 #include "../Include/bitmap_image.hpp"
 
@@ -45,6 +44,7 @@ using glm::mat3;
 SDL_Surface* screen;
 int t;
 glm::vec3 campos(0.0, 0.0, -1.0);
+bool running = true;
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
@@ -95,7 +95,8 @@ int main( int argc, char* argv[] )
     while (1);*/
 
 	screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT );
-	t = SDL_GetTicks();	// Set start value for timer.
+	t = SDL_GetTicks();	// Set start value for timer.    
+    
 
     // Load model
     std::vector<Triangle> model = std::vector<Triangle>();
@@ -104,13 +105,29 @@ int main( int argc, char* argv[] )
     model::Scene scene;
     scene.addTriangles(model);
 
-    Update();
-    Draw(scene);
-	while( NoQuitMessageSDL() )
+    RENDER::initialize(); //Triangles must be loaded to RENDER before this is called; "void RENDER::addTriangle(Triangle& triangle)"
+
+    Pixel frame_buffer[SCREEN_WIDTH * SCREEN_HEIGHT];
+	while( NoQuitMessageSDL() && running )
 	{
 		Update();
-		Draw(scene);
+        RENDER::renderFrame(frame_buffer);
+
+        if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
+
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            for (int y = 0; y < SCREEN_HEIGHT; y++) {
+                Pixel& p = frame_buffer[x + y * SCREEN_WIDTH];
+                PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
+            }
+        }
+
+        if (SDL_MUSTLOCK(screen)) SDL_UnlockSurface(screen);
+
+        SDL_UpdateRect(screen, 0, 0, 0, 0);
 	}
+
+    RENDER::release();
 
 	SDL_SaveBMP( screen, "screenshot.bmp" );
 	return 0;
@@ -134,6 +151,10 @@ void Update()
     if (keystate[SDLK_RIGHT]) {
         // Move 
         campos.x += 0.005f;
+    }
+
+    if (keystate[SDLK_ESCAPE]) {
+        running = false;
     }
 
 	// Compute frame time:

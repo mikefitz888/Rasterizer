@@ -4,6 +4,9 @@
 #include <glm/glm.hpp>
 #include <vector>
 
+const int SCREEN_WIDTH = 500;
+const int SCREEN_HEIGHT = 500;
+
 // Used to describe a triangular surface:
 class Triangle {
 public:

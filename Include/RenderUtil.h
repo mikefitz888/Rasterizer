@@ -9,6 +9,7 @@
 #include <string>
 #include <fstream>
 #include <streambuf>
+#include <algorithm>
 
 struct Pixel {
     //Core pixel data
@@ -38,6 +39,8 @@ class RENDER {
     static void createOCLCommandQueue();
 
     static void allocateOCLBuffers();
+
+    static void sortTriangles();
 
     static void writeTriangles();
 

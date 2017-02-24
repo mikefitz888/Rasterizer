@@ -35,7 +35,7 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::string kernel_names[] = { "rasterizer" };
+    std::vector<std::string> kernel_names = { "rasterizer", "projection" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -48,7 +48,7 @@ void RENDER::loadOCLKernels() {
         cl::Program* nProg = new cl::Program(*context, str, false, &err);
         programs.emplace_back(nProg);
         if (err) {
-            printf("Error: %d\n", err);
+            printf("%d Error: %d\n", __LINE__, err);
             while (1);
         }
     }
@@ -59,7 +59,7 @@ void RENDER::loadOCLKernels() {
         program->build({ *device });
         cl::Kernel* nKern = new cl::Kernel(*program, kernel_names[n].c_str(), &err);
         if (err) {
-            printf("Error: %d\n", err);
+            printf("%d Error: %d\n", __LINE__, err);
             while (1);
         }
         kernels.emplace(kernel_names[n], nKern);
@@ -92,8 +92,12 @@ void RENDER::writeTriangles() {
         triangles[count++] = t->v2;
     }
 
-    //queue.enqueueWriteBuffer(triangle_buff, CL_TRUE, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), &(triangles->x)); //Ideally you would include glm/gtc/type_ptr.hpp and use glm::value_ptr, but it just does this anyway
+    queue->enqueueWriteBuffer(*triangle_buff, CL_TRUE, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), &(triangles->x)); //Ideally you would include glm/gtc/type_ptr.hpp and use glm::value_ptr, but it just does this anyway
     delete[] triangles;
+}
+
+void RENDER::sortTriangles() {
+    //std::sort(triangle_refs.begin(), triangle_refs.end(), [](const Triangle* l, const Triangle* r) -> bool { return l->maxY() < r->maxY(); });
 }
 
 /*
@@ -109,7 +113,8 @@ void RENDER::initialize() {
     loadOCLKernels();
     allocateOCLBuffers();
 
-    //Write triangles to device
+    //Sort + Write triangles to device
+    sortTriangles();
     writeTriangles();
 }
 
@@ -118,22 +123,52 @@ void RENDER::addTriangle(Triangle& triangle) {
 }
 
 void RENDER::renderFrame(Pixel* frame_buffer) {
-    unsigned int number_of_triangles = triangle_refs.size();
-    unsigned int screen_w = SCREEN_WIDTH;
-    kernels["rasterizer"]->setArg(0, sizeof number_of_triangles, &number_of_triangles);
-    kernels["rasterizer"]->setArg(1, sizeof screen_w, &screen_w);
-    kernels["rasterizer"]->setArg(2, *triangle_buff);
-    kernels["rasterizer"]->setArg(3, *frame_buff);
+    //Project Triangles to screen-space
+    float campos[] = { 0.f, 0.f, -2.f };
 
-    cl::NDRange offset = cl::NDRange(0, 0);
-    cl::NDRange global = cl::NDRange(SCREEN_WIDTH, SCREEN_HEIGHT);
+    //kernel void projection(global float3* const vertices, const float3 campos)
+    kernels["projection"]->setArg(0, *triangle_buff);
+    kernels["projection"]->setArg(1, sizeof(cl_float3), campos);
+
+    unsigned int number_of_triangles = triangle_refs.size();
+    cl::NDRange offset = cl::NDRange(0);
+    cl::NDRange global = cl::NDRange(number_of_triangles * 3); //number of vertices
+    cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
+
+    if (err) {
+        printf("%d Error: %d\n", __LINE__, err);
+        while (1);
+    }
+
+    glm::vec3* screen_space_triangles = new glm::vec3[triangle_refs.size() * 3];
+    
+    queue->enqueueReadBuffer(*triangle_buff, false, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), screen_space_triangles);
+    queue->finish();
+
+    //TODO: generate fragments
+
+    delete[] screen_space_triangles;
+    
+
+    /*unsigned int number_of_triangles = triangle_refs.size();
+    unsigned int screen_w = SCREEN_WIDTH;
+    unsigned int screen_h = SCREEN_HEIGHT;
+    kernels["rasterizer"]->setArg(0, sizeof number_of_triangles, &number_of_triangles);
+    kernels["rasterizer"]->setArg(1, *triangle_buff);
+    kernels["rasterizer"]->setArg(2, *frame_buff);
+    kernels["rasterizer"]->setArg(3, sizeof screen_w, &screen_w);
+    kernels["rasterizer"]->setArg(4, sizeof screen_h, &screen_h);
+
+    cl::NDRange offset = cl::NDRange(0);
+    cl::NDRange global = cl::NDRange(number_of_triangles);
     cl_int err = queue->enqueueNDRangeKernel(*kernels["rasterizer"], NULL, global);
     if (err) {
         printf("Error: %d\n", err);
         while (1);
     }
     queue->enqueueReadBuffer(*frame_buff, false, 0, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT, frame_buffer);
-    queue->finish();
+    
+    queue->finish();*/
 }
 
 void RENDER::release() {

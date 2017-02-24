@@ -3,9 +3,11 @@
 
 #include <glm/glm.hpp>
 #include <vector>
+#include <algorithm>
 
-const int SCREEN_WIDTH = 500;
-const int SCREEN_HEIGHT = 500;
+//These are set and are important for RenderUtil, they can be changed as long as they are different and both multiple of coarse_render_length in RenderUtil.cpp
+const int SCREEN_WIDTH = 600;
+const int SCREEN_HEIGHT = 480;
 
 // Used to describe a triangular surface:
 class Triangle {
@@ -41,6 +43,7 @@ public:
 
 	inline glm::vec3 e1() { return v1 - v0; }
 	inline glm::vec3 e2() { return v2 - v0; }
+    inline float maxY() const { return std::max(v0.y, std::max(v1.y, v2.y)); }
 
 	inline bool checkIntersection(glm::vec3 intersect) {
 		return (0 < intersect.y) && (0 < intersect.z) && (intersect.y + intersect.z < 1);

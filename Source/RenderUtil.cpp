@@ -61,7 +61,9 @@ void RENDER::loadOCLKernels() {
     unsigned int n = 0;
     for (auto program : programs) {
         cl_int err;
-        program->build({ *device });
+        char options[128];
+        sprintf(options, "-D SCREEN_WIDTH=%d -D SCREEN_HEIGHT=%d", SCREEN_WIDTH, SCREEN_HEIGHT);
+        program->build({ *device }, options);
         cl::Kernel* nKern = new cl::Kernel(*program, kernel_names[n].c_str(), &err);
         if (err) {
             printf("%d Error: %d\n", __LINE__, err);
@@ -126,6 +128,10 @@ void RENDER::addTriangle(Triangle& triangle) {
     triangle_refs.emplace_back(&triangle);
 }
 
+int compare(const void* a, const void* b) { //returns difference in max y-values
+    return -std::max(std::max(((glm::vec3*)a)[0].y, ((glm::vec3*)a)[1].y), ((glm::vec3*)a)[2].y) + std::max(std::max(((glm::vec3*)b)[0].y, ((glm::vec3*)b)[1].y), ((glm::vec3*)b)[2].y);
+}
+
 void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     //Project Triangles to screen-space
     float campos2[] = { campos.x, campos.y, campos.z };
@@ -137,22 +143,29 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
 
     unsigned int number_of_triangles = triangle_refs.size();
 
-    //if (scene_changed) { 
-        //scene_changed = false;
-        //Converts world space triangles to screen space
-        //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
-        //This section only runs if the "triangle" buffer has been written to after this section has last been run
-        const cl::NDRange offset = cl::NDRange(0);
-        const cl::NDRange global = cl::NDRange(number_of_triangles * 3); //number of vertices
-        cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
+    //Converts world space triangles to screen space
+    //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
+    //This section only runs if the "triangle" buffer has been written to after this section has last been run
+    const cl::NDRange offset = cl::NDRange(0);
+    const cl::NDRange global = cl::NDRange(number_of_triangles * 3); //number of vertices
+    cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
 
-        if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
-        queue->enqueueReadBuffer(*screen_space_buff, false, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), triangles);
-        queue->finish();
-    //}
+    queue->enqueueReadBuffer(*screen_space_buff, false, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), triangles);
+    queue->finish();
 
-    //TODO: generate fragments
+    //TODO: generate fragments, maybe cpu is best for this, gpus normally do it in hardware
+    qsort(triangles, triangle_refs.size(), sizeof(glm::vec3) * 3, compare); //sorts triangles by max y value first
+    //Scanline rasterization
+    for (int y = SCREEN_HEIGHT - 1; y >= 0; y--) {
+        int first_intersection_index; //lowest triangle index that intersects with line y
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            //loop thru triangles until max_y < y
+        }
+        //Remove/skip all triangles before first_intersection_index (this removes triangles that have been passed by the scanline)
+    }
+
     //printf("triangles = %d\n", triangle_refs.size());
     for (int i = 0; i < triangle_refs.size() * 3; i++) {
         int x = triangles[i].x;

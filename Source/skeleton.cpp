@@ -125,12 +125,16 @@ int main( int argc, char* argv[] )
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
                 Pixel& p = frame_buffer[x + y * SCREEN_WIDTH];
                 PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
+                p = {}; //C++11 method of clearing struct (Pixel in this case, this resets all values so maybe be careful)
             }
         }
 
         if (SDL_MUSTLOCK(screen)) SDL_UnlockSurface(screen);
 
         SDL_UpdateRect(screen, 0, 0, 0, 0);
+
+        // Clear scren
+        SDL_FillRect(screen, 0, 0x00000000);
 	}
 
     RENDER::release();

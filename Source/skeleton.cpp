@@ -106,9 +106,10 @@ int main( int argc, char* argv[] )
     scene.addTriangles(model);
     
     //RENDER::addTriangle(scene.getTrianglesRef()[0]);
-    for (auto triangle : scene.getTrianglesRef()) {
+    for (auto& triangle : scene.getTrianglesRef()) {
         RENDER::addTriangle(triangle);
     }
+
     RENDER::initialize(); //Triangles must be loaded to RENDER before this is called; "void RENDER::addTriangle(Triangle& triangle)"
     
     Pixel* frame_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
@@ -116,7 +117,7 @@ int main( int argc, char* argv[] )
 	while( NoQuitMessageSDL() && running )
 	{
 		Update(); 
-        RENDER::renderFrame(frame_buffer); while (1);
+        RENDER::renderFrame(frame_buffer, campos);
         
         if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 

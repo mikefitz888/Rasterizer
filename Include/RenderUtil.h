@@ -21,14 +21,22 @@ class RENDER {
     //static Pixel frame_buff[SCREEN_WIDTH * SCREEN_HEIGHT];
     static cl::Buffer* frame_buff;
     static cl::Buffer* triangle_buff;
+    static cl::Buffer* screen_space_buff;
 
     static std::vector<Triangle*> triangle_refs;
+    static glm::vec3* triangles;
 
     static cl::Device* device;
     static cl::Context* context;
     static cl::CommandQueue* queue;
     static std::vector<cl::Program*> programs;
     static std::map<std::string, cl::Kernel*> kernels;
+
+    /*
+        Utility variables
+    */
+
+    static bool scene_changed;
 
     static void getOCLDevice();
 
@@ -49,7 +57,7 @@ public:
 
     static void addTriangle(Triangle& triangle);
 
-    static void renderFrame(Pixel* frame_buffer);
+    static void renderFrame(Pixel* frame_buffer, glm::vec3 campos);
 
     static void release();
 };

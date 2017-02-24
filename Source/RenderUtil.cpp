@@ -3,12 +3,17 @@
 //Honestly got no clue why this is required, compiler whines too much, it should be able to determine this from the .h declarations
 cl::Buffer* RENDER::frame_buff;
 cl::Buffer* RENDER::triangle_buff;
+cl::Buffer* RENDER::screen_space_buff;
 std::vector<Triangle*> RENDER::triangle_refs;
+glm::vec3* RENDER::triangles;
+
 cl::Device* RENDER::device;
 cl::Context* RENDER::context;
 cl::CommandQueue* RENDER::queue;
 std::vector<cl::Program*> RENDER::programs;
 std::map<std::string, cl::Kernel*> RENDER::kernels;
+
+bool RENDER::scene_changed = false;
 
 void RENDER::getOCLDevice() {
     //OpenCl
@@ -79,21 +84,20 @@ void RENDER::createOCLCommandQueue() {
 void RENDER::allocateOCLBuffers() {
     frame_buff = new cl::Buffer(*context, CL_MEM_WRITE_ONLY, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(glm::vec3) * 3 * triangle_refs.size());
+    screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(glm::vec3) * 3 * triangle_refs.size());
 }
 
 void RENDER::writeTriangles() {
     //May need to modify this to do transfer in multiple steps if memory requirement is too high
-    glm::vec3* triangles = new glm::vec3[3 * triangle_refs.size()];
-
+    triangles = new glm::vec3[3 * triangle_refs.size()];
     size_t count = 0;
     for (auto t : triangle_refs) {
         triangles[count++] = t->v0;
         triangles[count++] = t->v1;
         triangles[count++] = t->v2;
     }
-
+    scene_changed = true;
     queue->enqueueWriteBuffer(*triangle_buff, CL_TRUE, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), &(triangles->x)); //Ideally you would include glm/gtc/type_ptr.hpp and use glm::value_ptr, but it just does this anyway
-    delete[] triangles;
 }
 
 void RENDER::sortTriangles() {
@@ -122,32 +126,40 @@ void RENDER::addTriangle(Triangle& triangle) {
     triangle_refs.emplace_back(&triangle);
 }
 
-void RENDER::renderFrame(Pixel* frame_buffer) {
+void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     //Project Triangles to screen-space
-    float campos[] = { 0.f, 0.f, -2.f };
+    float campos2[] = { campos.x, campos.y, campos.z };
 
     //kernel void projection(global float3* const vertices, const float3 campos)
     kernels["projection"]->setArg(0, *triangle_buff);
-    kernels["projection"]->setArg(1, sizeof(cl_float3), campos);
+    kernels["projection"]->setArg(1, *screen_space_buff);
+    kernels["projection"]->setArg(2, sizeof(cl_float3), campos2);
 
     unsigned int number_of_triangles = triangle_refs.size();
-    cl::NDRange offset = cl::NDRange(0);
-    cl::NDRange global = cl::NDRange(number_of_triangles * 3); //number of vertices
-    cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
 
-    if (err) {
-        printf("%d Error: %d\n", __LINE__, err);
-        while (1);
-    }
+    //if (scene_changed) { 
+        //scene_changed = false;
+        //Converts world space triangles to screen space
+        //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
+        //This section only runs if the "triangle" buffer has been written to after this section has last been run
+        const cl::NDRange offset = cl::NDRange(0);
+        const cl::NDRange global = cl::NDRange(number_of_triangles * 3); //number of vertices
+        cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
 
-    glm::vec3* screen_space_triangles = new glm::vec3[triangle_refs.size() * 3];
-    
-    queue->enqueueReadBuffer(*triangle_buff, false, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), screen_space_triangles);
-    queue->finish();
+        if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+
+        queue->enqueueReadBuffer(*screen_space_buff, false, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), triangles);
+        queue->finish();
+    //}
 
     //TODO: generate fragments
-
-    delete[] screen_space_triangles;
+    //printf("triangles = %d\n", triangle_refs.size());
+    for (int i = 0; i < triangle_refs.size() * 3; i++) {
+        int x = triangles[i].x;
+        int y = triangles[i].y;
+        if (x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT) continue;
+        frame_buffer[x + y * SCREEN_WIDTH].r = 255;
+    }
     
 
     /*unsigned int number_of_triangles = triangle_refs.size();
@@ -187,8 +199,10 @@ void RENDER::release() {
     }
     triangle_refs.clear();
 
+    delete[] triangles;
     delete frame_buff;
     delete triangle_buff;
+    delete screen_space_buff;
     delete device;
     delete context;
     delete queue;

@@ -31,7 +31,7 @@ namespace model {
 		std::vector<LightSource*> light_sources;
 		void getTriangles(std::vector<Triangle>& triangles);
 	
-		inline std::vector<Triangle>& getTrianglesRef() { return triangles; }
+        inline std::vector<Triangle>& getTrianglesRef() { return triangles; }
 		inline void addModel(Model* model) {
 			models.emplace_back(model);
 		}

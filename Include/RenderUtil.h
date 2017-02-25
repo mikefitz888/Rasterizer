@@ -11,6 +11,17 @@
 #include <streambuf>
 #include <algorithm>
 
+union ufvec3 {
+    glm::vec3 f;
+    glm::u32vec3 i;
+    inline ufvec3() {}
+};
+
+struct triplet {
+    ufvec3 v0, v1, v2;
+    unsigned int id;
+};
+
 struct Pixel {
     //Core pixel data
     uint8_t r, g, b, a;
@@ -24,7 +35,7 @@ class RENDER {
     static cl::Buffer* screen_space_buff;
 
     static std::vector<Triangle*> triangle_refs;
-    static glm::vec3* triangles;
+    static triplet* triangles;
 
     static cl::Device* device;
     static cl::Context* context;

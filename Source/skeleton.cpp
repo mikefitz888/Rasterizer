@@ -43,7 +43,7 @@ using glm::mat3;
 
 SDL_Surface* screen;
 int t;
-glm::vec3 campos(0.0, 0.0, -1.0);
+glm::vec3 campos(0.0, 0.0, -3.0);
 bool running = true;
 
 /* ----------------------------------------------------------------------------*/
@@ -124,6 +124,7 @@ int main( int argc, char* argv[] )
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
                 Pixel& p = frame_buffer[x + y * SCREEN_WIDTH];
+                
                 PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
                 p = {}; //C++11 method of clearing struct (Pixel in this case, this resets all values so maybe be careful)
             }
@@ -135,6 +136,7 @@ int main( int argc, char* argv[] )
 
         // Clear scren
         SDL_FillRect(screen, 0, 0x00000000);
+        while (1);
 	}
 
     RENDER::release();

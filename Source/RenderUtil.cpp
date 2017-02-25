@@ -5,7 +5,7 @@ cl::Buffer* RENDER::frame_buff;
 cl::Buffer* RENDER::triangle_buff;
 cl::Buffer* RENDER::screen_space_buff;
 std::vector<Triangle*> RENDER::triangle_refs;
-glm::vec3* RENDER::triangles;
+triplet* RENDER::triangles;
 
 cl::Device* RENDER::device;
 cl::Context* RENDER::context;
@@ -40,7 +40,7 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::vector<std::string> kernel_names = { "rasterizer", "projection" };
+    std::vector<std::string> kernel_names = { /*"rasterizer",*/ "projection" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -84,26 +84,35 @@ void RENDER::createOCLCommandQueue() {
 }
 
 void RENDER::allocateOCLBuffers() {
-    frame_buff = new cl::Buffer(*context, CL_MEM_WRITE_ONLY, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
-    triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(glm::vec3) * 3 * triangle_refs.size());
-    screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(glm::vec3) * 3 * triangle_refs.size());
+    frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
+    triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(triplet) * triangle_refs.size());
+    screen_space_buff = new cl::Buffer(*context, CL_MEM_WRITE_ONLY, sizeof(triplet) * triangle_refs.size());
 }
 
 void RENDER::writeTriangles() {
     //May need to modify this to do transfer in multiple steps if memory requirement is too high
-    triangles = new glm::vec3[3 * triangle_refs.size()];
-    size_t count = 0;
-    for (auto t : triangle_refs) {
-        triangles[count++] = t->v0;
-        triangles[count++] = t->v1;
-        triangles[count++] = t->v2;
+    triangles = new triplet[triangle_refs.size()];
+    //printf("SIZE = %d\n", triangle_refs.size());
+    
+    for (int i = 0; i < triangle_refs.size(); i++) {
+        auto& t = triangle_refs[i];
+        triangles[i].v0.f = t->v0;
+        triangles[i].v1.f = t->v1;
+        triangles[i].v2.f = t->v2;
+        //printf("%f %f %f, %f %f %f, %f %f %f\n", t->v0.x, t->v0.y, t->v0.z, t->v1.x, t->v1.y, t->v1.z, t->v2.x, t->v2.y, t->v2.z);
     }
+    //printf("%p %p %p, %d\n", &(triangles[0].v0.f.x), &(triangles[0].v0.f.y), &(triangles[0].v0.f.z), sizeof(triplet));
     scene_changed = true;
-    queue->enqueueWriteBuffer(*triangle_buff, CL_TRUE, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), &(triangles->x)); //Ideally you would include glm/gtc/type_ptr.hpp and use glm::value_ptr, but it just does this anyway
+
+    cl_int err = queue->enqueueWriteBuffer(*triangle_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
+    if (err != 0) {
+        printf("ERROR %d %d\n", __LINE__, err);
+        while (1);
+    }
 }
 
 void RENDER::sortTriangles() {
-    //std::sort(triangle_refs.begin(), triangle_refs.end(), [](const Triangle* l, const Triangle* r) -> bool { return l->maxY() < r->maxY(); });
+    
 }
 
 /*
@@ -128,10 +137,6 @@ void RENDER::addTriangle(Triangle& triangle) {
     triangle_refs.emplace_back(&triangle);
 }
 
-int compare(const void* a, const void* b) { //returns difference in max y-values
-    return -std::max(std::max(((glm::vec3*)a)[0].y, ((glm::vec3*)a)[1].y), ((glm::vec3*)a)[2].y) + std::max(std::max(((glm::vec3*)b)[0].y, ((glm::vec3*)b)[1].y), ((glm::vec3*)b)[2].y);
-}
-
 void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     //Project Triangles to screen-space
     float campos2[] = { campos.x, campos.y, campos.z };
@@ -142,36 +147,79 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     kernels["projection"]->setArg(2, sizeof(cl_float3), campos2);
 
     unsigned int number_of_triangles = triangle_refs.size();
+    
 
     //Converts world space triangles to screen space
     //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
     //This section only runs if the "triangle" buffer has been written to after this section has last been run
     const cl::NDRange offset = cl::NDRange(0);
-    const cl::NDRange global = cl::NDRange(number_of_triangles * 3); //number of vertices
+    const cl::NDRange global = cl::NDRange(number_of_triangles); //number of vertices
     cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
 
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
-    queue->enqueueReadBuffer(*screen_space_buff, false, 0, sizeof(glm::vec3) * 3 * triangle_refs.size(), triangles);
+    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
     queue->finish();
 
+
+
     //TODO: generate fragments, maybe cpu is best for this, gpus normally do it in hardware
-    qsort(triangles, triangle_refs.size(), sizeof(glm::vec3) * 3, compare); //sorts triangles by max y value first
+    //qsort(triangles, triangle_refs.size(), sizeof(glm::vec3) * 3, compare); //sorts triangles by lowest y value first (top of screen)
+    sortTriangles();
+    
     //Scanline rasterization
-    for (int y = SCREEN_HEIGHT - 1; y >= 0; y--) {
-        int first_intersection_index; //lowest triangle index that intersects with line y
-        for (int x = 0; x < SCREEN_WIDTH; x++) {
-            //loop thru triangles until max_y < y
+    /*std::map<size_t, bool> active_triangles;
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        size_t max_index = triangle_refs.size();
+        for (int i = 0; i < triangle_refs.size()*3; i+=3) {
+            if (std::min(std::min(triangles[i].y, triangles[i + 1].y), triangles[i + 2].y) > y) { 
+                max_index = (i / 3) - 1;
+                break;
+            }
         }
-        //Remove/skip all triangles before first_intersection_index (this removes triangles that have been passed by the scanline)
-    }
+
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            for (int t = 0; t < max_index; t++) {
+                //If intersection -> set triangle to true in active_triangles
+            }
+        }
+
+        //Prune false triangles from active_triangles, then set all active_triangles to false
+    }*/
+
+
+
+
+
+
+
+
+
+
+    
 
     //printf("triangles = %d\n", triangle_refs.size());
-    for (int i = 0; i < triangle_refs.size() * 3; i++) {
-        int x = triangles[i].x;
-        int y = triangles[i].y;
-        if (x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT) continue;
-        frame_buffer[x + y * SCREEN_WIDTH].r = 255;
+    for (int i = 0; i < triangle_refs.size(); i++) {
+            unsigned int& x = triangles[i].v0.i.x;
+            unsigned int& y = triangles[i].v0.i.y;
+
+            if (!(x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT)) {
+                frame_buffer[x + y * SCREEN_WIDTH].r = 255;
+            }
+
+            x = triangles[i].v1.i.x;
+            y = triangles[i].v1.i.y;
+
+            if (!(x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT)) {
+                frame_buffer[x + y * SCREEN_WIDTH].r = 255;
+            }
+
+            x = triangles[i].v2.i.x;
+            y = triangles[i].v2.i.y;
+
+            if (!(x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT)) {
+                frame_buffer[x + y * SCREEN_WIDTH].r = 255;
+            }
     }
     
 

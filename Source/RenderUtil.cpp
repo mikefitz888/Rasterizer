@@ -40,7 +40,7 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::vector<std::string> kernel_names = { /*"rasterizer",*/ "projection" };
+    std::vector<std::string> kernel_names = { "rasterizer", "projection" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -86,7 +86,7 @@ void RENDER::createOCLCommandQueue() {
 void RENDER::allocateOCLBuffers() {
     frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(triplet) * triangle_refs.size());
-    screen_space_buff = new cl::Buffer(*context, CL_MEM_WRITE_ONLY, sizeof(triplet) * triangle_refs.size());
+    screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(triplet) * triangle_refs.size());
 }
 
 void RENDER::writeTriangles() {
@@ -99,6 +99,7 @@ void RENDER::writeTriangles() {
         triangles[i].v0.f = t->v0;
         triangles[i].v1.f = t->v1;
         triangles[i].v2.f = t->v2;
+        triangles[i].id = i;
         //printf("%f %f %f, %f %f %f, %f %f %f\n", t->v0.x, t->v0.y, t->v0.z, t->v1.x, t->v1.y, t->v1.z, t->v2.x, t->v2.y, t->v2.z);
     }
     //printf("%p %p %p, %d\n", &(triangles[0].v0.f.x), &(triangles[0].v0.f.y), &(triangles[0].v0.f.z), sizeof(triplet));
@@ -111,8 +112,16 @@ void RENDER::writeTriangles() {
     }
 }
 
-void RENDER::sortTriangles() {
-    
+//msb-radix sort, based off rosetta stone code. Improved with c++11 lambda notation. Is tested, appears fine
+void RENDER::sortTriangles(triplet* first, triplet* last, int msb) {
+    if (first != last && msb >= 0) {
+        triplet *mid = std::partition(first, last, [msb](triplet& t) -> bool {
+            return msb == 31 ?  t.minY() < 0 : !(t.minY() & (1 << msb));
+        });
+        msb--; // decrement most-significant-bit
+        sortTriangles(first, mid, msb); // sort left partition
+        sortTriangles(mid, last, msb); // sort right partition
+    }
 }
 
 /*
@@ -128,9 +137,10 @@ void RENDER::initialize() {
     loadOCLKernels();
     allocateOCLBuffers();
 
-    //Sort + Write triangles to device
-    sortTriangles();
+    //Write triangles to device
     writeTriangles();
+    kernels["projection"]->setArg(0, *triangle_buff);
+    kernels["projection"]->setArg(1, *screen_space_buff);
 }
 
 void RENDER::addTriangle(Triangle& triangle) {
@@ -142,10 +152,8 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     float campos2[] = { campos.x, campos.y, campos.z };
 
     //kernel void projection(global float3* const vertices, const float3 campos)
-    kernels["projection"]->setArg(0, *triangle_buff);
-    kernels["projection"]->setArg(1, *screen_space_buff);
+    
     kernels["projection"]->setArg(2, sizeof(cl_float3), campos2);
-
     unsigned int number_of_triangles = triangle_refs.size();
     
 
@@ -153,53 +161,36 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
     //This section only runs if the "triangle" buffer has been written to after this section has last been run
     const cl::NDRange offset = cl::NDRange(0);
-    const cl::NDRange global = cl::NDRange(number_of_triangles); //number of vertices
+    const cl::NDRange global = cl::NDRange(number_of_triangles);
     cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
 
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
-    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
+    //queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
+    
+    kernels["rasterizer"]->setArg(0, *frame_buff);
+    kernels["rasterizer"]->setArg(1, *screen_space_buff);
+    printf("got to %d\n", __LINE__);
+
+    err = queue->enqueueNDRangeKernel(*kernels["rasterizer"], NULL, global);
+    printf("got to %d\n", __LINE__);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    
+    queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
     queue->finish();
+    
 
 
 
     //TODO: generate fragments, maybe cpu is best for this, gpus normally do it in hardware
     //qsort(triangles, triangle_refs.size(), sizeof(glm::vec3) * 3, compare); //sorts triangles by lowest y value first (top of screen)
-    sortTriangles();
+    //sortTriangles(triangles, triangles + triangle_refs.size());
     
-    //Scanline rasterization
-    /*std::map<size_t, bool> active_triangles;
-    for (int y = 0; y < SCREEN_HEIGHT; y++) {
-        size_t max_index = triangle_refs.size();
-        for (int i = 0; i < triangle_refs.size()*3; i+=3) {
-            if (std::min(std::min(triangles[i].y, triangles[i + 1].y), triangles[i + 2].y) > y) { 
-                max_index = (i / 3) - 1;
-                break;
-            }
-        }
-
-        for (int x = 0; x < SCREEN_WIDTH; x++) {
-            for (int t = 0; t < max_index; t++) {
-                //If intersection -> set triangle to true in active_triangles
-            }
-        }
-
-        //Prune false triangles from active_triangles, then set all active_triangles to false
-    }*/
-
-
-
-
-
-
-
-
-
 
     
 
     //printf("triangles = %d\n", triangle_refs.size());
-    for (int i = 0; i < triangle_refs.size(); i++) {
+    /*for (int i = 0; i < triangle_refs.size(); i++) {
             unsigned int& x = triangles[i].v0.i.x;
             unsigned int& y = triangles[i].v0.i.y;
 
@@ -220,7 +211,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
             if (!(x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT)) {
                 frame_buffer[x + y * SCREEN_WIDTH].r = 255;
             }
-    }
+    }*/
     
 
     /*unsigned int number_of_triangles = triangle_refs.size();

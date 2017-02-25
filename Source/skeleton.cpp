@@ -43,7 +43,7 @@ using glm::mat3;
 
 SDL_Surface* screen;
 int t;
-glm::vec3 campos(0.0, 0.0, -3.0);
+glm::vec3 campos(0.0, 0.0, -2.0);
 bool running = true;
 
 /* ----------------------------------------------------------------------------*/

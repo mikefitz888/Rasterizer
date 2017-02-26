@@ -3,7 +3,7 @@
 typedef struct __attribute__((packed, aligned(4))) {
     uchar r, g, b, a;
     uint triangle_id;
-    float depth;
+    float depth; //If depth == 0, fragment is not initialized
 } Fragment;
 
 typedef struct {
@@ -31,41 +31,62 @@ kernel void rasterizer(global Fragment* const frame_buf, global triplet* const s
 
     uint id = get_global_id(0);
     global triplet* s = &(sst[id]);
-    printf("%d %d\n", s->v0.i.x, s->v0.i.y);
-    uint2 a = (uint2)(s->v0.i.x, s->v0.i.y);
-    uint2 b = (uint2)(s->v1.i.x, s->v1.i.y);
-    uint2 c = (uint2)(s->v2.i.x, s->v2.i.y);
+    //printf("%d %d\n", s->v0.i.x, s->v0.i.y);
+    int2 a = (int2)(s->v0.i.x, s->v0.i.y);
+    int2 b = (int2)(s->v1.i.x, s->v1.i.y);
+    int2 c = (int2)(s->v2.i.x, s->v2.i.y);
 
     //computeBaryCentric pre-reqs
     float2 v0 = convert_float2(b - a);
     float2 v1 = convert_float2(c - a);
-    float d00 = dot(v0, v0);
-    float d01 = dot(v0, v1);
-    float d11 = dot(v1, v1);
-    float inv_denom = 1 / (d00 * d11 - d01 * d01);
-
+    //printf("(%d %d) - (%d %d) = (%f %f)\n", b.x, b.y, a.x, a.y, v0.x, v0.y);
+    //float d00 = dot(v0, v0);
+    //float d01 = dot(v0, v1);
+    //float d11 = dot(v1, v1);
+    //float inv_denom = 1 / (d00 * d11 - d01 * d01);
+    float inv_denom = 1.f / (v0.x * v1.y - v1.x * v0.y); //Shortcut for 2d systems
+    //printf("(1.f / (%f * %f - %f * %f)) = %f\n", v0.x, v1.y, v1.x, v0.y, inv_denom);
     //bounding-box
     //printf("%d %d, %d %d, %d %d\n", a.x, a.y, b.x, b.y, c.x, c.y);
     uint minX = min(min(a.x, b.x), c.x);
     uint minY = min(min(a.y, b.y), c.y);
     uint maxX = max(max(a.x, b.x), c.x);
     uint maxY = max(max(a.y, b.y), c.y);
-    //printf("min (%f %f), max (%f %f)\n", minX, minY, maxX, maxY);
+    //printf("min (%d %d), max (%d %d)\n", minX, minY, maxX, maxY);
     for (uint x = minX; x <= maxX; x++) {
         for (uint y = minY; y <= maxY; y++) {
-            float2 v2 = convert_float2((uint2)(x, y) - a);
-            float d20 = dot(v2, v0);
-            float d21 = dot(v2, v1);
+            //Compute barycentric coordinates
+            float2 v2 = convert_float2((int2)(x, y) - a);
+            //float d20 = dot(v2, v0);
+            //float d21 = dot(v2, v1);
 
-            float v = (d11 * d20 - d01 * d21) * inv_denom;
-            float w = (d00 * d21 - d01 * d20) * inv_denom;
+            //float v = (d11 * d20 - d01 * d21) * inv_denom;
+            //float w = (d00 * d21 - d01 * d20) * inv_denom;
+            float v = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
+            float w = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
             float u = 1.f - v - w;
-            if (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0) {
-                frame_buf[x + y * SCREEN_WIDTH].r = 128;
+
+
+            if (0 || (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
+                float depth = (u*s->v0.i.z + v*s->v1.i.z + w*s->v2.i.z);
+
+                //Probably needs to be a lock here, can deal with it when it's an issue
+                float d = min((frame_buf[x + y * SCREEN_WIDTH].depth), depth);
+                if (d == depth || d == 0) {
+                    atomic_xchg(&(frame_buf[x + y * SCREEN_WIDTH].depth), depth);
+                    atomic_xchg(&(frame_buf[x + y * SCREEN_WIDTH].triangle_id), id);
+                    //atomic_xchg(&(frame_buf[x + y * SCREEN_WIDTH].a), 1);
+                    frame_buf[x + y * SCREEN_WIDTH].r = 255;
+                    //frame_buf[x + y * SCREEN_WIDTH].g = 255 - 7 * id;
+                    //frame_buf[x + y * SCREEN_WIDTH].b = (id % 16) * 16;
+                    //frame_buf[x + y * SCREEN_WIDTH].triangle_id = id;
+                    //frame_buf[x + y * SCREEN_WIDTH].depth = depth;
+                }
             }
         }
     }
 
+    //Render vertices
     uint p_id = s->v0.i.x + s->v0.i.y * SCREEN_WIDTH;
     frame_buf[p_id].r = (uchar)255;
 

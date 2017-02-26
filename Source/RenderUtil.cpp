@@ -4,8 +4,11 @@
 cl::Buffer* RENDER::frame_buff;
 cl::Buffer* RENDER::triangle_buff;
 cl::Buffer* RENDER::screen_space_buff;
+cl::Buffer* RENDER::material_buffer;
+
 std::vector<Triangle*> RENDER::triangle_refs;
 triplet* RENDER::triangles;
+Material* RENDER::materials;
 
 cl::Device* RENDER::device;
 cl::Context* RENDER::context;
@@ -40,7 +43,7 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::vector<std::string> kernel_names = { "rasterizer", "projection" };
+    std::vector<std::string> kernel_names = { "rasterizer", "projection", "shaedars" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -87,15 +90,21 @@ void RENDER::allocateOCLBuffers() {
     frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(triplet) * triangle_refs.size());
     screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(triplet) * triangle_refs.size());
+    material_buffer = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Material) * triangle_refs.size());
 }
 
 void RENDER::writeTriangles() {
     //May need to modify this to do transfer in multiple steps if memory requirement is too high
     triangles = new triplet[triangle_refs.size()];
+    materials = new Material[triangle_refs.size()];
     //printf("SIZE = %d\n", triangle_refs.size());
     
     for (int i = 0; i < triangle_refs.size(); i++) {
         auto& t = triangle_refs[i];
+        materials[i].r = t->color.r;
+        materials[i].g = t->color.g;
+        materials[i].b = t->color.b;
+
         triangles[i].v0.f = t->v0;
         triangles[i].v1.f = t->v1;
         triangles[i].v2.f = t->v2;
@@ -106,6 +115,12 @@ void RENDER::writeTriangles() {
     scene_changed = true;
 
     cl_int err = queue->enqueueWriteBuffer(*triangle_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
+    if (err != 0) {
+        printf("ERROR %d %d\n", __LINE__, err);
+        while (1);
+    }
+
+    err = queue->enqueueWriteBuffer(*material_buffer, CL_TRUE, 0, sizeof(Material) * triangle_refs.size(), materials);
     if (err != 0) {
         printf("ERROR %d %d\n", __LINE__, err);
         while (1);
@@ -170,12 +185,17 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     
     kernels["rasterizer"]->setArg(0, *frame_buff);
     kernels["rasterizer"]->setArg(1, *screen_space_buff);
-    printf("got to %d\n", __LINE__);
 
     err = queue->enqueueNDRangeKernel(*kernels["rasterizer"], NULL, global);
-    printf("got to %d\n", __LINE__);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     
+    //queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
+    kernels["shaedars"]->setArg(0, *frame_buff);
+    kernels["shaedars"]->setArg(1, *material_buffer);
+    const cl::NDRange screen = cl::NDRange(SCREEN_WIDTH * SCREEN_HEIGHT);
+    err = queue->enqueueNDRangeKernel(*kernels["shaedars"], NULL, screen);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+
     queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
     queue->finish();
     
@@ -252,6 +272,8 @@ void RENDER::release() {
     triangle_refs.clear();
 
     delete[] triangles;
+    delete[] materials;
+    delete material_buffer;
     delete frame_buff;
     delete triangle_buff;
     delete screen_space_buff;

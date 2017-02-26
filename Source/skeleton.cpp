@@ -43,7 +43,7 @@ using glm::mat3;
 
 SDL_Surface* screen;
 int t;
-glm::vec3 campos(0.0, 0.0, -4.0);
+glm::vec3 campos(0.0, 0.0, -2.0);
 bool running = true;
 
 /* ----------------------------------------------------------------------------*/
@@ -136,7 +136,7 @@ int main( int argc, char* argv[] )
 
         // Clear scren
         SDL_FillRect(screen, 0, 0x00000000);
-        while (1);
+        //while (1);
 	}
 
     RENDER::release();

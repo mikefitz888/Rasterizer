@@ -53,14 +53,20 @@ struct Pixel {
     //unsigned short x, y;
 };
 
+struct Material {
+    float r, g, b, a;
+};
+
 class RENDER {
     //static Pixel frame_buff[SCREEN_WIDTH * SCREEN_HEIGHT];
     static cl::Buffer* frame_buff;
     static cl::Buffer* triangle_buff;
     static cl::Buffer* screen_space_buff;
+    static cl::Buffer* material_buffer;
 
     static std::vector<Triangle*> triangle_refs;
     static triplet* triangles;
+    static Material* materials;
 
     static cl::Device* device;
     static cl::Context* context;

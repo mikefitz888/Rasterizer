@@ -45,6 +45,7 @@ struct triplet {
     }
 };
 
+//TODO: move these to a header file for both cpp and opencl
 struct Pixel {
     //Core pixel data
     uint8_t r, g, b, a;
@@ -57,12 +58,21 @@ struct Material {
     float r, g, b, a;
 };
 
+struct AABB {
+    int minX, minY, maxX, maxY;
+    glm::vec2 v0, v1;
+    glm::ivec2 a;
+    float inv_denom, d0, d1, d2;
+    size_t triangle_id, offset;
+};
+
 class RENDER {
     //static Pixel frame_buff[SCREEN_WIDTH * SCREEN_HEIGHT];
     static cl::Buffer* frame_buff;
     static cl::Buffer* triangle_buff;
     static cl::Buffer* screen_space_buff;
     static cl::Buffer* material_buffer;
+    static cl::Buffer* aabb_buffer;
 
     static std::vector<Triangle*> triangle_refs;
     static triplet* triangles;

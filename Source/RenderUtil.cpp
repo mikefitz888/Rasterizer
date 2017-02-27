@@ -5,6 +5,7 @@ cl::Buffer* RENDER::frame_buff;
 cl::Buffer* RENDER::triangle_buff;
 cl::Buffer* RENDER::screen_space_buff;
 cl::Buffer* RENDER::material_buffer;
+cl::Buffer* RENDER::aabb_buffer;
 
 std::vector<Triangle*> RENDER::triangle_refs;
 triplet* RENDER::triangles;
@@ -43,7 +44,7 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::vector<std::string> kernel_names = { "rasterizer", "projection", "shaedars" };
+    std::vector<std::string> kernel_names = { "rasterizer", "projection", "shaedars", "aabb" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -69,7 +70,7 @@ void RENDER::loadOCLKernels() {
         program->build({ *device }, options);
         cl::Kernel* nKern = new cl::Kernel(*program, kernel_names[n].c_str(), &err);
         if (err) {
-            printf("%d Error: %d\n", __LINE__, err);
+            printf("%d Error: %d, building %s\n", __LINE__, err, kernel_names[n].c_str());
             while (1);
         }
         kernels.emplace(kernel_names[n], nKern);
@@ -87,10 +88,12 @@ void RENDER::createOCLCommandQueue() {
 }
 
 void RENDER::allocateOCLBuffers() {
+    //TODO: move these to a map for better organisation
     frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(triplet) * triangle_refs.size());
     screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(triplet) * triangle_refs.size());
     material_buffer = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Material) * triangle_refs.size());
+    aabb_buffer = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(AABB) * triangle_refs.size());
 }
 
 void RENDER::writeTriangles() {
@@ -116,6 +119,7 @@ void RENDER::writeTriangles() {
 
     cl_int err = queue->enqueueWriteBuffer(*triangle_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
     if (err != 0) {
+        printf("No. of Triangles = %d @ %p", triangle_refs.size(), triangles);
         printf("ERROR %d %d\n", __LINE__, err);
         while (1);
     }
@@ -183,16 +187,37 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
 
     //queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
     
-    kernels["rasterizer"]->setArg(0, *frame_buff);
+    kernels["rasterizer"]->setArg(0, *aabb_buffer);
     kernels["rasterizer"]->setArg(1, *screen_space_buff);
 
     err = queue->enqueueNDRangeKernel(*kernels["rasterizer"], NULL, global);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     
+    kernels["aabb"]->setArg(0, *frame_buff);
+    kernels["aabb"]->setArg(1, *aabb_buffer);
+    
+    AABB* local_aabb_buff = new AABB[triangle_refs.size()];
+    queue->enqueueReadBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);
+    unsigned int sum = 0;
+    for (int i = 0; i < triangle_refs.size(); i++) {
+        local_aabb_buff[i].offset = sum;
+        sum += (local_aabb_buff[i].maxX - local_aabb_buff[i].minX) * (local_aabb_buff[i].maxY - local_aabb_buff[i].minY);
+    }
+    queue->enqueueWriteBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);
+    delete[] local_aabb_buff;
+    
+    kernels["aabb"]->setArg(2, sizeof sum, &sum);
+
+    const cl::NDRange task_count = cl::NDRange(sum);
+    
+    err = queue->enqueueNDRangeKernel(*kernels["aabb"], NULL, task_count);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+   
     //queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
     kernels["shaedars"]->setArg(0, *frame_buff);
     kernels["shaedars"]->setArg(1, *material_buffer);
     const cl::NDRange screen = cl::NDRange(SCREEN_WIDTH * SCREEN_HEIGHT);
+    
     err = queue->enqueueNDRangeKernel(*kernels["shaedars"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
@@ -266,9 +291,9 @@ void RENDER::release() {
     }
     programs.clear();
 
-    for (auto t : triangle_refs) {
+    /*for (auto& t : triangle_refs) {
         delete t;
-    }
+    }*/
     triangle_refs.clear();
 
     delete[] triangles;

@@ -31,7 +31,7 @@ namespace model {
 		std::vector<LightSource*> light_sources;
 		void getTriangles(std::vector<Triangle>& triangles);
 	
-        inline std::vector<Triangle>& getTrianglesRef() { return triangles; }
+        std::vector<Triangle>& getTrianglesRef();
 		inline void addModel(Model* model) {
 			models.emplace_back(model);
 		}
@@ -92,7 +92,10 @@ namespace model {
 
 		//Convert to Triangles for raytracer
 		inline std::vector<Triangle>* getFaces() {
+            //printf("%d %d %d %d %d %d\n", vertexIndices.size(), textureIndices.size(), normalIndices.size(), vertices.size(), vertex_textures.size(), vertex_normals.size());
+            
 			if (modified) {
+                vertex_normals.emplace_back();
 				modified = false;
 				triangles.clear();
 				for (unsigned int i = 0; i < vertexIndices.size(); i += 3) {

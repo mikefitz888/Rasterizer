@@ -16,7 +16,6 @@
 #include "../Include/ModelLoader.h"
 #include "../Include/bitmap_image.hpp"
 
-
 //VS14 FIX
 #ifdef _WIN32
 FILE _iob[] = { *stdin, *stdout, *stderr };
@@ -43,7 +42,7 @@ using glm::mat3;
 
 SDL_Surface* screen;
 int t;
-glm::vec3 campos(0.0, 0.0, -2.0);
+glm::vec3 campos(0.0, 0.0, -3.0);
 bool running = true;
 
 /* ----------------------------------------------------------------------------*/
@@ -57,43 +56,6 @@ void Interpolate(glm::ivec2 a, glm::ivec2 b, vector<glm::ivec2>& result);
 int main( int argc, char* argv[] )
 {
 
-    /*std::vector<cl::Platform> platforms;
-    cl::Platform::get(&platforms);
-
-    int platform_id = 0;
-    int device_id = 0;
-
-    std::cout << "Number of Platforms: " << platforms.size() << std::endl;
-
-    for (std::vector<cl::Platform>::iterator it = platforms.begin(); it != platforms.end(); ++it) {
-        cl::Platform platform(*it);
-
-        std::cout << "Platform ID: " << platform_id++ << std::endl;
-        std::cout << "Platform Name: " << platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
-        std::cout << "Platform Vendor: " << platform.getInfo<CL_PLATFORM_VENDOR>() << std::endl;
-
-        std::vector<cl::Device> devices;
-        platform.getDevices(CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_CPU, &devices);
-
-        for (std::vector<cl::Device>::iterator it2 = devices.begin(); it2 != devices.end(); ++it2) {
-            cl::Device device(*it2);
-
-            std::cout << "\tDevice " << device_id++ << ": " << std::endl;
-            std::cout << "\t\tDevice Name: " << device.getInfo<CL_DEVICE_NAME>() << std::endl;
-            std::cout << "\t\tDevice Type: " << device.getInfo<CL_DEVICE_TYPE>();
-            std::cout << " (GPU: " << CL_DEVICE_TYPE_GPU << ", CPU: " << CL_DEVICE_TYPE_CPU << ")" << std::endl;
-            std::cout << "\t\tDevice Vendor: " << device.getInfo<CL_DEVICE_VENDOR>() << std::endl;
-            std::cout << "\t\tDevice Max Compute Units: " << device.getInfo<CL_DEVICE_MAX_COMPUTE_UNITS>() << std::endl;
-            std::cout << "\t\tDevice Global Memory: " << device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>() << std::endl;
-            std::cout << "\t\tDevice Max Clock Frequency: " << device.getInfo<CL_DEVICE_MAX_CLOCK_FREQUENCY>() << std::endl;
-            std::cout << "\t\tDevice Max Allocateable Memory: " << device.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>() << std::endl;
-            std::cout << "\t\tDevice Local Memory: " << device.getInfo<CL_DEVICE_LOCAL_MEM_SIZE>() << std::endl;
-            std::cout << "\t\tDevice Available: " << device.getInfo< CL_DEVICE_AVAILABLE>() << std::endl;
-        }
-        std::cout << std::endl;
-    }
-    while (1);*/
-
 	screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT );
 	t = SDL_GetTicks();	// Set start value for timer.    
     
@@ -103,9 +65,15 @@ int main( int argc, char* argv[] )
     LoadTestModel(model);
 
     model::Scene scene;
-    scene.addTriangles(model);
+    //scene.addTriangles(model);
     
     //RENDER::addTriangle(scene.getTrianglesRef()[0]);
+    model::Model m("sphere.obj");
+    scene.addModel(&m);
+    if (scene.getTrianglesRef().size() == 0) {
+        printf("There are no triangles!");
+        while (1);
+    }
     for (auto& triangle : scene.getTrianglesRef()) {
         RENDER::addTriangle(triangle);
     }
@@ -113,6 +81,7 @@ int main( int argc, char* argv[] )
     RENDER::initialize(); //Triangles must be loaded to RENDER before this is called; "void RENDER::addTriangle(Triangle& triangle)"
     
     Pixel* frame_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
+    
     
 	while( NoQuitMessageSDL() && running )
 	{

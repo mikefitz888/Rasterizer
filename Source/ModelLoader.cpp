@@ -1,4 +1,4 @@
-//#define DEBUG
+#define DEBUG
 #include "../Include/ModelLoader.h"
 #define EQUAL(s1, s2) strcmp(s1, s2) == 0
 
@@ -21,6 +21,8 @@ namespace model {
 			}
 		}
 	}
+
+    std::vector<Triangle>& Scene::getTrianglesRef() { return *(models[0]->getFaces()); }
 
 	Model::Model(std::string file_name) {
 		std::string token;
@@ -59,7 +61,7 @@ namespace model {
 		//if (!(vertex >> w)) w = 1.0f;
 		vertices.emplace_back(x, y, z);
 #ifdef DEBUG
-		printf("Added vertex: (%f, %f, %f) \n", x, y, z);
+		//printf("Added vertex: (%f, %f, %f) \n", x, y, z);
 #endif
 	}
 
@@ -69,7 +71,7 @@ namespace model {
 		//if (!(texture >> w)) w = 0.0f;
 		vertex_textures.emplace_back(u, v);
 #ifdef DEBUG
-		printf("Added vertex_texture: (%f, %f) \n", u, v);
+		//printf("Added vertex_texture: (%f, %f) \n", u, v);
 #endif
 	}
 
@@ -79,33 +81,33 @@ namespace model {
 		normal >> x >> y >> z;
 		vertex_normals.emplace_back(x, y, z);
 #ifdef DEBUG
-		printf("Added vertex_normal: (%f, %f, %f) \n", x, y, z);
+		//printf("Added vertex_normal: (%f, %f, %f) \n", x, y, z);
 #endif
 	}
 
 	void Model::parseFace(std::istringstream& face) {
 		// vertex/texture/normal
+        printf("face?\n");
 		std::string v[3];
 		face >> v[0] >> v[1] >> v[2];
 		//glm::umat3 oface = glm::umat3();
 		for (int i = 0; i < 3; i++) {
-			int vertex, texture, normal;
+			int vertex = 0, texture = 0, normal = 0;
 			std::istringstream section(v[i]);
 			section >> vertex;
-			
+            
+
 			if (section.peek() == '/') { 
 				section.ignore();
-				if (section.peek() != '/') section >> texture;
+                if (section.peek() != '/') section >> texture; 
+                if (section.peek() == '/') {
+                    section.ignore();
+                    section >> normal;
+                }
 			}
-			else continue;
-
-			if (section.peek() == '/') {
-				section.ignore();
-				section >> normal;
-			}
-			else continue;
+            
 			//Assume vertex/texture/normal are all available
-			vertexIndices.push_back(vertex-1);
+            vertexIndices.push_back(vertex - 1);
 			textureIndices.push_back(texture-1);
 			normalIndices.push_back(normal-1);
 #ifdef DEBUG

@@ -83,6 +83,7 @@ class RENDER {
     static cl::CommandQueue* queue;
     static std::vector<cl::Program*> programs;
     static std::map<std::string, cl::Kernel*> kernels;
+    static AABB* local_aabb_buff;
 
     /*
         Utility variables

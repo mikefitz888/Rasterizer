@@ -1,4 +1,4 @@
-#define DEBUG
+//#define DEBUG
 #include "../Include/ModelLoader.h"
 #define EQUAL(s1, s2) strcmp(s1, s2) == 0
 
@@ -22,7 +22,7 @@ namespace model {
 		}
 	}
 
-    std::vector<Triangle>& Scene::getTrianglesRef() { return *(models[0]->getFaces()); }
+    std::vector<Triangle>& Scene::getTrianglesRef() {/* return triangles;*/return *(models[0]->getFaces()); }
 
 	Model::Model(std::string file_name) {
 		std::string token;
@@ -87,7 +87,9 @@ namespace model {
 
 	void Model::parseFace(std::istringstream& face) {
 		// vertex/texture/normal
+#ifdef DEBUG
         printf("face?\n");
+#endif
 		std::string v[3];
 		face >> v[0] >> v[1] >> v[2];
 		//glm::umat3 oface = glm::umat3();

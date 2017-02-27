@@ -65,15 +65,17 @@ int main( int argc, char* argv[] )
     LoadTestModel(model);
 
     model::Scene scene;
-    //scene.addTriangles(model);
+   // scene.addTriangles(model);
     
     //RENDER::addTriangle(scene.getTrianglesRef()[0]);
-    model::Model m("sphere.obj");
+    model::Model m("dragon.obj");
     scene.addModel(&m);
-    if (scene.getTrianglesRef().size() == 0) {
+
+    if( scene.getTrianglesRef().size() == 0){
         printf("There are no triangles!");
         while (1);
     }
+
     for (auto& triangle : scene.getTrianglesRef()) {
         RENDER::addTriangle(triangle);
     }
@@ -107,6 +109,7 @@ int main( int argc, char* argv[] )
         SDL_FillRect(screen, 0, 0x00000000);
         //while (1);
 	}
+    
 
     RENDER::release();
     delete[] frame_buffer;
@@ -120,19 +123,19 @@ void Update()
     Uint8* keystate = SDL_GetKeyState(0);
     if (keystate[SDLK_UP]) {
         // Move camera forward
-        campos.z += 0.005f;
+        campos.z += 0.015f;
     }
     if (keystate[SDLK_DOWN]) {
         // Move camera backward
-        campos.z -= 0.005f;
+        campos.z -= 0.015f;
     }
     if (keystate[SDLK_LEFT]) {
         // Move camera to the left
-        campos.x -= 0.005f;
+        campos.x -= 0.015f;
     }
     if (keystate[SDLK_RIGHT]) {
         // Move 
-        campos.x += 0.005f;
+        campos.x += 0.015f;
     }
 
     if (keystate[SDLK_ESCAPE]) {

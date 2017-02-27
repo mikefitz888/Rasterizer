@@ -10,6 +10,7 @@ cl::Buffer* RENDER::aabb_buffer;
 std::vector<Triangle*> RENDER::triangle_refs;
 triplet* RENDER::triangles;
 Material* RENDER::materials;
+AABB* RENDER::local_aabb_buff;
 
 cl::Device* RENDER::device;
 cl::Context* RENDER::context;
@@ -24,11 +25,18 @@ void RENDER::getOCLDevice() {
     std::vector<cl::Platform> all_platforms;
     //cl::Platform::get(&all_platforms);
     cl::Platform::get(&all_platforms);
+
+    //cl::Platform default_platform;
+    //cl::Platform::get(&default_platform);
+
+    std::cout << all_platforms.size() << " Platforms found!" << std::endl;
     if (all_platforms.size() == 0) {
         std::cout << " No platforms found. Check OpenCL installation!\n";
         exit(1);
     }
-    cl::Platform default_platform = all_platforms[1];
+
+
+    cl::Platform default_platform = all_platforms[0];
     std::cout << "Using platform: " << default_platform.getInfo<CL_PLATFORM_NAME>() << "\n";
 
     //get default device of the default platform
@@ -160,6 +168,8 @@ void RENDER::initialize() {
     writeTriangles();
     kernels["projection"]->setArg(0, *triangle_buff);
     kernels["projection"]->setArg(1, *screen_space_buff);
+
+    local_aabb_buff = new AABB[triangle_refs.size()];
 }
 
 void RENDER::addTriangle(Triangle& triangle) {
@@ -174,54 +184,141 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     
     kernels["projection"]->setArg(2, sizeof(cl_float3), campos2);
     unsigned int number_of_triangles = triangle_refs.size();
-    
+    std::cout << "NUMBER OF TRIANGLES: " << number_of_triangles << std::endl;
 
     //Converts world space triangles to screen space
     //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
     //This section only runs if the "triangle" buffer has been written to after this section has last been run
+    
+    /// PROJECTION STAGE (GPU) ---------------------------------------------------------------------------------------------------//
     const cl::NDRange offset = cl::NDRange(0);
     const cl::NDRange global = cl::NDRange(number_of_triangles);
     cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
 
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
-    //queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
-    
-    kernels["rasterizer"]->setArg(0, *aabb_buffer);
-    kernels["rasterizer"]->setArg(1, *screen_space_buff);
+    // Dont need to copy this if running rasterization step
+    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
+    ///---------------------------------------------------------------------------------------------------------------------//
 
-    err = queue->enqueueNDRangeKernel(*kernels["rasterizer"], NULL, global);
-    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
-    
-    kernels["aabb"]->setArg(0, *frame_buff);
-    kernels["aabb"]->setArg(1, *aabb_buffer);
-    
-    AABB* local_aabb_buff = new AABB[triangle_refs.size()];
-    queue->enqueueReadBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);
-    unsigned int sum = 0;
-    for (int i = 0; i < triangle_refs.size(); i++) {
+
+    /// PROJECTION STAGE (GPU) ---------------------------------------------------------------------------------------------------//
+    //kernels["rasterizer"]->setArg(0, *aabb_buffer);
+    //kernels["rasterizer"]->setArg(1, *screen_space_buff);
+
+    //err = queue->enqueueNDRangeKernel(*kernels["rasterizer"], NULL, global);
+    //if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+
+    // Read AABB data from the rasterization step
+    //queue->enqueueReadBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);
+    ///---------------------------------------------------------------------------------------------------------------------//
+
+    /// AABB.cl (GPU) ---------------------------------------------------------------------------------------------------//
+    //kernels["aabb"]->setArg(0, *frame_buff);
+    //kernels["aabb"]->setArg(1, *aabb_buffer);
+
+    //unsigned int sum = 0;
+    /*for (int i = 0; i < triangle_refs.size(); i++) {
         local_aabb_buff[i].offset = sum;
         sum += (local_aabb_buff[i].maxX - local_aabb_buff[i].minX) * (local_aabb_buff[i].maxY - local_aabb_buff[i].minY);
-    }
-    queue->enqueueWriteBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);
-    delete[] local_aabb_buff;
-    
-    kernels["aabb"]->setArg(2, sizeof sum, &sum);
+    }*/
 
-    const cl::NDRange task_count = cl::NDRange(sum);
-    
-    err = queue->enqueueNDRangeKernel(*kernels["aabb"], NULL, task_count);
-    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
-   
+    //std::cout << "SUM: " << sum << std::endl;
+    //queue->enqueueWriteBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);
+
+    // kernels["aabb"]->setArg(2, sizeof sum, &sum);
+
+    //const cl::NDRange task_count = cl::NDRange(sum);
+
+    //err = queue->enqueueNDRangeKernel(*kernels["aabb"], NULL, task_count);
+    //if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     //queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
+    ///---------------------------------------------------------------------------------------------------------------------//
+
+    // AABB step CPU
+#pragma omp parallel for
+    for (int i = 0; i < triangle_refs.size(); i++) {
+
+        /// Projection.cl port (CPU)---------------------------------------- ///
+      /*  triplet s = triangles[i];
+        triplet& t = triangles[i];
+
+        s.v0.i.x = (unsigned int)(((t.v0.f.x - campos.x) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
+        s.v0.i.y = (unsigned int)(((t.v0.f.y - campos.y) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
+        s.v0.i.z = glm::distance(glm::vec3(t.v0.f.x, t.v0.f.y, t.v0.f.z), campos);
+
+        s.v1.i.x = (unsigned int)(((t.v1.f.x - campos.x) / (t.v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
+        s.v1.i.y = (unsigned int)(((t.v1.f.y - campos.y) / (t.v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
+        s.v1.i.z = glm::distance(glm::vec3(t.v1.f.x, t.v1.f.y, t.v1.f.z), campos);
+
+        s.v2.i.x = (unsigned int)(((t.v2.f.x - campos.x) / (t.v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
+        s.v2.i.y = (unsigned int)(((t.v2.f.y - campos.y) / (t.v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
+        s.v2.i.z = glm::distance(glm::vec3(t.v2.f.x, t.v2.f.y, t.v2.f.z), campos);*/
+        /// ---------------------------------------------------------- ///
+
+        /// Rasterizer.cl port CPU)---------------------------------------- ///
+        triplet& s = triangles[i];
+
+        glm::ivec2 a = glm::ivec2(s.v0.i.x, s.v0.i.y);
+        glm::ivec2 b = glm::ivec2(s.v1.i.x, s.v1.i.y);
+        glm::ivec2 c = glm::ivec2(s.v2.i.x, s.v2.i.y);
+
+        local_aabb_buff[i].a = a;
+        local_aabb_buff[i].d0 = s.v0.i.z;
+        local_aabb_buff[i].d1 = s.v1.i.z;
+        local_aabb_buff[i].d2 = s.v2.i.z;
+        local_aabb_buff[i].triangle_id = i;
+
+        local_aabb_buff[i].v0 = (glm::vec2)(b - a);
+        local_aabb_buff[i].v1 = (glm::vec2)(c - a);
+
+        local_aabb_buff[i].inv_denom = 1.f / (local_aabb_buff[i].v0.x * local_aabb_buff[i].v1.y - local_aabb_buff[i].v1.x * local_aabb_buff[i].v0.y);
+
+        local_aabb_buff[i].minX = glm::min(glm::min(a.x, b.x), c.x);
+        local_aabb_buff[i].minY = glm::min(glm::min(a.y, b.y), c.y);
+        local_aabb_buff[i].maxX = glm::max(glm::max(a.x, b.x), c.x);
+        local_aabb_buff[i].maxY = glm::max(glm::max(a.y, b.y), c.y);
+
+        /// ---------------------------------------------------------- ///
+
+        /// AABB step CPU ---------------------------------------- ///
+        for (int x = local_aabb_buff[i].minX; x <= local_aabb_buff[i].maxX; x++) {
+            for (int y = local_aabb_buff[i].minY; y <= local_aabb_buff[i].maxY; y++) {
+
+
+                if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
+                    glm::ivec2 v2 = glm::ivec2(x, y) - local_aabb_buff[i].a;
+                    glm::ivec2 v0 = local_aabb_buff[i].v0;
+                    glm::ivec2 v1 = local_aabb_buff[i].v1;
+
+
+                    float v = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
+                    float w = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
+                    float u = 1.f - v - w;
+
+                    if (0 || (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
+                        frame_buffer[x + y*SCREEN_WIDTH].r = 255;
+                    }
+                }
+
+            }
+        }
+        /// ---------------------------------------------------------- ///
+    }
+   
+
+
+    
+   
+    /// FRAGMENT STEP ---------------------------------------- ///
     kernels["shaedars"]->setArg(0, *frame_buff);
     kernels["shaedars"]->setArg(1, *material_buffer);
     const cl::NDRange screen = cl::NDRange(SCREEN_WIDTH * SCREEN_HEIGHT);
     
-    err = queue->enqueueNDRangeKernel(*kernels["shaedars"], NULL, screen);
-    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+   // err = queue->enqueueNDRangeKernel(*kernels["shaedars"], NULL, screen);
+   // if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
-    queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
+    //queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
     queue->finish();
     
 
@@ -305,4 +402,5 @@ void RENDER::release() {
     delete device;
     delete context;
     delete queue;
+    delete[] local_aabb_buff;
 }

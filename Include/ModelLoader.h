@@ -45,7 +45,7 @@ namespace model {
 		}
 
 		inline void addTriangles(std::vector<Triangle>& ts) {
-			for (auto t : ts) {
+			for (auto& t : ts) {
 				triangles.push_back(t);
 			}
 		}

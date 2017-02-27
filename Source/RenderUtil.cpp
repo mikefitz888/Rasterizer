@@ -297,7 +297,12 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
                     float u = 1.f - v - w;
 
                     if (0 || (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
-                        frame_buffer[x + y*SCREEN_WIDTH].r = 255;
+                        float depth = (u*local_aabb_buff[i].d0 + v*local_aabb_buff[i].d1 + w*local_aabb_buff[i].d2);
+                        float d = glm::min((frame_buffer[x + y * SCREEN_WIDTH].depth), depth);
+                        if (d == depth || d == 0) {
+                            frame_buffer[x + y*SCREEN_WIDTH].r = 255;
+                            frame_buffer[x + y*SCREEN_WIDTH].depth = depth;
+                        }
                     }
                 }
 
@@ -315,12 +320,15 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     kernels["shaedars"]->setArg(1, *material_buffer);
     const cl::NDRange screen = cl::NDRange(SCREEN_WIDTH * SCREEN_HEIGHT);
     
-   // err = queue->enqueueNDRangeKernel(*kernels["shaedars"], NULL, screen);
-   // if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    queue->enqueueWriteBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
 
-    //queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
+    err = queue->enqueueNDRangeKernel(*kernels["shaedars"], NULL, screen);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+
+
+    queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
     queue->finish();
-    
+    /// ---------------------------------------------------------- ///
 
 
 

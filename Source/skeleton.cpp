@@ -68,7 +68,7 @@ int main( int argc, char* argv[] )
    // scene.addTriangles(model);
     
     //RENDER::addTriangle(scene.getTrianglesRef()[0]);
-    model::Model m("dragon.obj");
+    model::Model m("sphere.obj");
     scene.addModel(&m);
 
     if( scene.getTrianglesRef().size() == 0){

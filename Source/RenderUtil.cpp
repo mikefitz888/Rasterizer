@@ -74,7 +74,7 @@ void RENDER::loadOCLKernels() {
     for (auto program : programs) {
         cl_int err;
         char options[128];
-        sprintf(options, "-D SCREEN_WIDTH=%d -D SCREEN_HEIGHT=%d", SCREEN_WIDTH, SCREEN_HEIGHT);
+        sprintf(options, "-D SCREEN_WIDTH=%d -D SCREEN_HEIGHT=%d -I../Include/", SCREEN_WIDTH, SCREEN_HEIGHT);
         program->build({ *device }, options);
         cl::Kernel* nKern = new cl::Kernel(*program, kernel_names[n].c_str(), &err);
         if (err) {
@@ -116,9 +116,19 @@ void RENDER::writeTriangles() {
         materials[i].g = t->color.g;
         materials[i].b = t->color.b;
 
-        triangles[i].v0.f = t->v0;
-        triangles[i].v1.f = t->v1;
-        triangles[i].v2.f = t->v2;
+        ///Converting to ocl types
+        triangles[i].v0.f.x = t->v0.x;
+        triangles[i].v0.f.y = t->v0.y;
+        triangles[i].v0.f.z = t->v0.z;
+
+        triangles[i].v1.f.x = t->v1.x;
+        triangles[i].v1.f.y = t->v1.y;
+        triangles[i].v1.f.z = t->v1.z;
+
+        triangles[i].v2.f.x = t->v2.x;
+        triangles[i].v2.f.y = t->v2.y;
+        triangles[i].v2.f.z = t->v2.z;
+
         triangles[i].id = i;
         //printf("%f %f %f, %f %f %f, %f %f %f\n", t->v0.x, t->v0.y, t->v0.z, t->v1.x, t->v1.y, t->v1.z, t->v2.x, t->v2.y, t->v2.z);
     }
@@ -183,8 +193,8 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     //kernel void projection(global float3* const vertices, const float3 campos)
     
     kernels["projection"]->setArg(2, sizeof(cl_float3), campos2);
-    unsigned int number_of_triangles = triangle_refs.size();
-    std::cout << "NUMBER OF TRIANGLES: " << number_of_triangles << std::endl;
+    const unsigned int number_of_triangles = triangle_refs.size();
+    //std::cout << "NUMBER OF TRIANGLES: " << number_of_triangles << std::endl;
 
     //Converts world space triangles to screen space
     //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
@@ -198,7 +208,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
     // Dont need to copy this if running rasterization step
-    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
+    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * number_of_triangles, triangles);
     ///---------------------------------------------------------------------------------------------------------------------//
 
 
@@ -237,7 +247,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
 
     // AABB step CPU
 #pragma omp parallel for
-    for (int i = 0; i < triangle_refs.size(); i++) {
+    for (int i = 0; i < number_of_triangles; i++) {
 
         /// Projection.cl port (CPU)---------------------------------------- ///
       /*  triplet s = triangles[i];
@@ -257,52 +267,54 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         /// ---------------------------------------------------------- ///
 
         /// Rasterizer.cl port CPU)---------------------------------------- ///
-        triplet& s = triangles[i];
+        const triplet& s = triangles[i];
 
-        glm::ivec2 a = glm::ivec2(s.v0.i.x, s.v0.i.y);
-        glm::ivec2 b = glm::ivec2(s.v1.i.x, s.v1.i.y);
-        glm::ivec2 c = glm::ivec2(s.v2.i.x, s.v2.i.y);
+        const glm::ivec2 a = glm::ivec2(s.v0.i.x, s.v0.i.y);
+        const glm::ivec2 b = glm::ivec2(s.v1.i.x, s.v1.i.y);
+        const glm::ivec2 c = glm::ivec2(s.v2.i.x, s.v2.i.y);
 
-        local_aabb_buff[i].a = a;
-        local_aabb_buff[i].d0 = s.v0.i.z;
-        local_aabb_buff[i].d1 = s.v1.i.z;
-        local_aabb_buff[i].d2 = s.v2.i.z;
-        local_aabb_buff[i].triangle_id = i;
+        const float d0 = s.v0.i.z;
+        const float d1 = s.v1.i.z;
+        const float d2 = s.v2.i.z;
 
-        local_aabb_buff[i].v0 = (glm::vec2)(b - a);
-        local_aabb_buff[i].v1 = (glm::vec2)(c - a);
+        const glm::vec2 v0 = (b - a);
+        const glm::vec2 v1 = (c - a);
 
-        local_aabb_buff[i].inv_denom = 1.f / (local_aabb_buff[i].v0.x * local_aabb_buff[i].v1.y - local_aabb_buff[i].v1.x * local_aabb_buff[i].v0.y);
+        const float inv_denom = 1.f / (v0.x * v1.y - v1.x * v0.y);
 
-        local_aabb_buff[i].minX = glm::min(glm::min(a.x, b.x), c.x);
-        local_aabb_buff[i].minY = glm::min(glm::min(a.y, b.y), c.y);
-        local_aabb_buff[i].maxX = glm::max(glm::max(a.x, b.x), c.x);
-        local_aabb_buff[i].maxY = glm::max(glm::max(a.y, b.y), c.y);
+        //Excludes off-screen triangles
+        const int minX = glm::min(glm::min(a.x, b.x), glm::min(c.x, SCREEN_WIDTH) );
+        const int minY = glm::min(glm::min(a.y, b.y), glm::min(c.y, SCREEN_HEIGHT) );
+        const int maxX = glm::max(glm::max(a.x, b.x), glm::max(c.x, 0));
+        const int maxY = glm::max(glm::max(a.y, b.y), glm::max(c.y, 0));
 
         /// ---------------------------------------------------------- ///
 
         /// AABB step CPU ---------------------------------------- ///
-        for (int x = local_aabb_buff[i].minX; x <= local_aabb_buff[i].maxX; x++) {
-            for (int y = local_aabb_buff[i].minY; y <= local_aabb_buff[i].maxY; y++) {
-
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
 
                 if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-                    glm::ivec2 v2 = glm::ivec2(x, y) - local_aabb_buff[i].a;
-                    glm::ivec2 v0 = local_aabb_buff[i].v0;
-                    glm::ivec2 v1 = local_aabb_buff[i].v1;
+                    glm::ivec2 v2 = glm::ivec2(x, y) - a;
 
+                    ///Continuously check that point lies in triangle
+                    const float v = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
+                    if (v < 0 || v > 1) continue;
 
-                    float v = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
-                    float w = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
-                    float u = 1.f - v - w;
+                    const float w = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
+                    if (w < 0 || w > 1) continue;
 
-                    if (0 || (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
-                        float depth = (u*local_aabb_buff[i].d0 + v*local_aabb_buff[i].d1 + w*local_aabb_buff[i].d2);
-                        float d = glm::min((frame_buffer[x + y * SCREEN_WIDTH].depth), depth);
-                        if (d == depth || d == 0) {
-                            frame_buffer[x + y*SCREEN_WIDTH].r = 255;
-                            frame_buffer[x + y*SCREEN_WIDTH].depth = depth;
-                        }
+                    const float u = 1.f - v - w;
+                    if (u < 0 || u > 1) continue;
+
+                    Pixel& pixel = *(frame_buffer + x + y * SCREEN_WIDTH);
+                    const float depth = (u*d0 + v*d1 + w*d2);
+                    const float d = glm::min((pixel.depth), depth);
+                    if (d == depth || d == 0) {
+                        //It probably makes sense to set the material id here, as it would be expensive/unnecessary to send a map for all triangles->materials to the kernel
+                        pixel.material = 0;
+                        pixel.triangle_id = i;
+                        pixel.depth = depth;
                     }
                 }
 

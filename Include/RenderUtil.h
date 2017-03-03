@@ -11,10 +11,11 @@
 #include <fstream>
 #include <streambuf>
 #include <algorithm>
+#include "fragment.h"
 
 union ufvec3 {
-    glm::vec3 f;
-    glm::u32vec3 i;
+    cl_float3 f;
+    cl_int3 i;
     inline ufvec3() {}
 };
 
@@ -22,16 +23,16 @@ struct triplet {
     ufvec3 v0, v1, v2;
     unsigned int id;
     inline unsigned int minY() const { return std::min(std::min(v0.i.y, v1.i.y), v2.i.y); }
-    inline bool intersections(int y, unsigned int& const c0, unsigned int& const c1) const {
-        std::vector<glm::u32vec3> above;
-        std::vector<glm::u32vec3> below;
+    inline bool intersections(const int y, unsigned int& const c0, unsigned int& const c1) const {
+        std::vector< std::reference_wrapper<const cl_int3> > above;
+        std::vector< std::reference_wrapper<const cl_int3> > below;
         std::vector<int> intersect_x;
-
-        v0.i.y < y ? below.push_back(v0.i) : above.push_back(v0.i);
-        v1.i.y < y ? below.push_back(v1.i) : above.push_back(v1.i);
-        v2.i.y < y ? below.push_back(v2.i) : above.push_back(v2.i);
-        for (auto& a : above) {
-            for (auto& b : below) {
+        
+        v0.i.y < y ? below.emplace_back(v0.i) : above.emplace_back(v0.i);
+        v1.i.y < y ? below.emplace_back(v1.i) : above.emplace_back(v1.i);
+        v2.i.y < y ? below.emplace_back(v2.i) : above.emplace_back(v2.i);
+        for (const cl_int3& a : above) {
+            for (const cl_int3& b : below) {
                 int c = b.x + (a.x - b.x) * (y - b.y) / (a.y - b.y);
                 intersect_x.push_back(c);
             }
@@ -45,19 +46,6 @@ struct triplet {
     }
 };
 
-//TODO: move these to a header file for both cpp and opencl
-struct Pixel {
-    //Core pixel data
-    uint8_t r, g, b, a;
-    uint32_t triangle_id;
-    float depth;
-    //unsigned short x, y;
-};
-
-struct Material {
-    float r, g, b, a;
-};
-
 struct AABB {
     int minX, minY, maxX, maxY;
     glm::vec2 v0, v1;
@@ -65,6 +53,7 @@ struct AABB {
     float inv_denom, d0, d1, d2;
     size_t triangle_id, offset;
 };
+
 
 class RENDER {
     //static Pixel frame_buff[SCREEN_WIDTH * SCREEN_HEIGHT];

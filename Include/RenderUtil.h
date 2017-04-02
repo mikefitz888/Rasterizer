@@ -10,7 +10,7 @@
 #include <string>
 #include <fstream>
 #include <streambuf>
-#include <algorithm>
+//#include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 
 union ufvec3 {

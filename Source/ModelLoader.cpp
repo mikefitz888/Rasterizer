@@ -22,7 +22,7 @@ namespace model {
 		}
 	}
 
-    std::vector<Triangle>& Scene::getTrianglesRef() { return triangles;/* return triangles;*//*return *(models[0]->getFaces());*/ }
+    std::vector<Triangle>& Scene::getTrianglesRef() { /* return triangles;*/return *(models[0]->getFaces()); }
 
 	Model::Model(std::string file_name) {
 		std::string token;

@@ -65,11 +65,11 @@ int main( int argc, char* argv[] )
     LoadTestModel(model);
 
     model::Scene scene;
-    scene.addTriangles(model);
+    //scene.addTriangles(model);
     
     //RENDER::addTriangle(scene.getTrianglesRef()[0]);
-    //model::Model m("sphere.obj");
-    //scene.addModel(&m);
+    model::Model m("sphere.obj");
+    scene.addModel(&m);
 
     if( scene.getTrianglesRef().size() == 0){
         printf("There are no triangles!");

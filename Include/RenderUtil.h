@@ -11,15 +11,17 @@
 #include <fstream>
 #include <streambuf>
 #include <algorithm>
+#include <glm/gtc/matrix_transform.hpp>
 
 union ufvec3 {
     glm::vec3 f;
-    glm::u32vec3 i;
+    glm::vec3 i;
     inline ufvec3() {}
 };
 
 struct triplet {
     ufvec3 v0, v1, v2;
+    //glm::vec3 face_normal, n0, n1, n2;
     unsigned int id;
     inline unsigned int minY() const { return std::min(std::min(v0.i.y, v1.i.y), v2.i.y); }
     inline bool intersections(int y, unsigned int& const c0, unsigned int& const c1) const {

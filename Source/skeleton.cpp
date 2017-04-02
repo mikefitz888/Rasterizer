@@ -65,11 +65,11 @@ int main( int argc, char* argv[] )
     LoadTestModel(model);
 
     model::Scene scene;
-   // scene.addTriangles(model);
+    scene.addTriangles(model);
     
     //RENDER::addTriangle(scene.getTrianglesRef()[0]);
-    model::Model m("dragon.obj");
-    scene.addModel(&m);
+    //model::Model m("sphere.obj");
+    //scene.addModel(&m);
 
     if( scene.getTrianglesRef().size() == 0){
         printf("There are no triangles!");
@@ -124,19 +124,28 @@ void Update()
     Uint8* keystate = SDL_GetKeyState(0);
     if (keystate[SDLK_UP]) {
         // Move camera forward
-        campos.z += 0.015f;
+        campos.z += 0.045f;
     }
     if (keystate[SDLK_DOWN]) {
         // Move camera backward
-        campos.z -= 0.015f;
+        campos.z -= 0.045f;
     }
     if (keystate[SDLK_LEFT]) {
         // Move camera to the left
-        campos.x -= 0.015f;
+        campos.x -= 0.045f;
     }
     if (keystate[SDLK_RIGHT]) {
         // Move 
-        campos.x += 0.015f;
+        campos.x += 0.045f;
+    }
+
+    if (keystate[SDLK_PAGEUP]) {
+        // Move camera to the left
+        campos.y -= 0.045f;
+    }
+    if (keystate[SDLK_PAGEDOWN]) {
+        // Move 
+        campos.y += 0.045f;
     }
 
     if (keystate[SDLK_ESCAPE]) {

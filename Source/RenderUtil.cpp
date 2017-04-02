@@ -43,8 +43,15 @@ void RENDER::getOCLDevice() {
     std::vector<cl::Device> all_devices;
     default_platform.getDevices(CL_DEVICE_TYPE_GPU, &all_devices);
     if (all_devices.size() == 0) {
-        std::cout << " No devices found. Check OpenCL installation!\n";
-        exit(1);
+
+        // Check for CPU devices
+        default_platform.getDevices(CL_DEVICE_TYPE_CPU, &all_devices);
+        
+        if (all_devices.size() == 0) {
+            std::cout << " No devices found. Check OpenCL installation!\n";
+            exit(1);
+        }
+        std::cout << "No GPU found, running on CPU!" << std::endl;
     }
     device = new cl::Device(all_devices[0]);
     std::cout << "Using platform: " << device->getInfo<CL_DEVICE_NAME>() << "\n";
@@ -177,6 +184,8 @@ void RENDER::addTriangle(Triangle& triangle) {
 }
 
 void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
+    float rendered_triangle_count = 0;
+
     //Project Triangles to screen-space
     float campos2[] = { campos.x, campos.y, campos.z };
 
@@ -189,16 +198,17 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     //Converts world space triangles to screen space
     //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
     //This section only runs if the "triangle" buffer has been written to after this section has last been run
-    
+    cl_int err = 0;
+
     /// PROJECTION STAGE (GPU) ---------------------------------------------------------------------------------------------------//
-    const cl::NDRange offset = cl::NDRange(0);
+    /*const cl::NDRange offset = cl::NDRange(0);
     const cl::NDRange global = cl::NDRange(number_of_triangles);
     cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
 
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
     // Dont need to copy this if running rasterization step
-    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
+    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);*/
     ///---------------------------------------------------------------------------------------------------------------------//
 
 
@@ -240,33 +250,123 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     for (int i = 0; i < triangle_refs.size(); i++) {
 
         /// Projection.cl port (CPU)---------------------------------------- ///
-      /*  triplet s = triangles[i];
+        triplet s = triangles[i];
         triplet& t = triangles[i];
 
-        s.v0.i.x = (unsigned int)(((t.v0.f.x - campos.x) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
+        // Construct view matrix
+        //glm::mat4 VIEW_MATRIX = glm::mat4(1, 0, 0, -campos.x, 0, 1, 0, -campos.y, 0, 0, 1, -campos.z, 0, 0, 0, 1);
+        //VIEW_MATRIX = glm::transpose(VIEW_MATRIX);
+        glm::mat4 VIEW_MATRIX = glm::lookAt(campos, glm::vec3(campos.x, campos.y, campos.z + 10.0f), glm::vec3(0, 1, 0));
+
+        // World pos
+        glm::vec4 world_pos_0(triangle_refs[i]->v0.x, triangle_refs[i]->v0.y, triangle_refs[i]->v0.z, 1);
+        glm::vec4 world_pos_1(triangle_refs[i]->v1.x, triangle_refs[i]->v1.y, triangle_refs[i]->v1.z, 1);
+        glm::vec4 world_pos_2(triangle_refs[i]->v2.x, triangle_refs[i]->v2.y, triangle_refs[i]->v2.z, 1);
+
+        // Transform to view position
+        glm::vec4 view_pos0, view_pos1, view_pos2;
+        view_pos0 = VIEW_MATRIX*world_pos_0;
+        view_pos1 = VIEW_MATRIX*world_pos_1;
+        view_pos2 = VIEW_MATRIX*world_pos_2;
+
+        // Projection matrix
+        float znear = 0.1f;
+        float zfar = 10.0f;
+
+        float FOV = 60.0f;
+        /*float y_scale = 1.0f / glm::tan(glm::radians(FOV / 2.0f));
+        float x_scale = y_scale / (SCREEN_WIDTH / SCREEN_HEIGHT);
+        float frustum_length = zfar - znear;
+        */
+        //glm::mat4 PROJECTION_MATRIX = glm::mat4(x_scale, 0, 0, 0, 0, y_scale, 0, 0, 0, 0, -((zfar + znear) / frustum_length), -1, 0, 0, -((2 * znear * zfar) / frustum_length), 0);
+        //PROJECTION_MATRIX = glm::transpose(PROJECTION_MATRIX);
+        glm::mat4 PROJECTION_MATRIX = glm::perspective(glm::radians(FOV), -((float)SCREEN_WIDTH / (float)SCREEN_HEIGHT), znear, zfar);
+
+        glm::vec4 proj_pos0, proj_pos1, proj_pos2;
+        proj_pos0 = PROJECTION_MATRIX*view_pos0;
+        proj_pos1 = PROJECTION_MATRIX*view_pos1;
+        proj_pos2 = PROJECTION_MATRIX*view_pos2;
+        
+
+        // PERSPECTIVE DIVIDE
+        proj_pos0 /= proj_pos0.w;
+        proj_pos1 /= proj_pos1.w;
+        proj_pos2 /= proj_pos2.w;
+
+        // CONVERT NDC
+        proj_pos0.x *= 0.5;
+        proj_pos0.x += 0.5;
+
+        proj_pos0.y *= 0.5;
+        proj_pos0.y += 0.5;
+        
+
+        proj_pos1.x *= 0.5;
+        proj_pos1.x += 0.5;
+
+        proj_pos1.y *= 0.5;
+        proj_pos1.y += 0.5;
+
+        proj_pos2.x *= 0.5;
+        proj_pos2.x += 0.5;
+
+        proj_pos2.y *= 0.5;
+        proj_pos2.y += 0.5;
+        
+
+
+        // VIEWPORT TRANSFORM
+        proj_pos0.x *= SCREEN_WIDTH;
+        proj_pos1.x *= SCREEN_WIDTH;
+        proj_pos2.x *= SCREEN_WIDTH;
+
+        proj_pos0.y *= SCREEN_HEIGHT;
+        proj_pos1.y *= SCREEN_HEIGHT;
+        proj_pos2.y *= SCREEN_HEIGHT;
+
+        s.v0.i.x = (int)proj_pos0.x; 
+        s.v0.i.y = (int)proj_pos0.y;
+        s.v0.f.z = proj_pos0.z;
+
+        s.v1.i.x = (int)proj_pos1.x;
+        s.v1.i.y = (int)proj_pos1.y;
+        s.v1.f.z = proj_pos1.z;
+
+        s.v2.i.x = (int)proj_pos2.x;
+        s.v2.i.y = (int)proj_pos2.y;
+        s.v2.f.z = proj_pos2.z;
+
+       /* if (i == 0) {
+            std::cout << (int)proj_pos0.x << " " << (int)proj_pos0.y << " " << proj_pos0.z << std::endl;
+            std::cout << (int)proj_pos1.x << " " << (int)proj_pos1.y << " " << proj_pos1.z << std::endl;
+            std::cout << (int)proj_pos2.x << " " << (int)proj_pos2.y << " " << proj_pos2.z << std::endl;
+        }*/
+
+
+        /*s.v0.i.x = (unsigned int)(((t.v0.f.x - campos.x) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
         s.v0.i.y = (unsigned int)(((t.v0.f.y - campos.y) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-        s.v0.i.z = glm::distance(glm::vec3(t.v0.f.x, t.v0.f.y, t.v0.f.z), campos);
+        s.v0.i.z = glm::distance(glm::vec3(t.v0.f.x, t.v0.f.y, t.v0.f.z), campos)*glm::sign(t.v0.f.z - campos.z);
 
         s.v1.i.x = (unsigned int)(((t.v1.f.x - campos.x) / (t.v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
         s.v1.i.y = (unsigned int)(((t.v1.f.y - campos.y) / (t.v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-        s.v1.i.z = glm::distance(glm::vec3(t.v1.f.x, t.v1.f.y, t.v1.f.z), campos);
+        s.v1.i.z = glm::distance(glm::vec3(t.v1.f.x, t.v1.f.y, t.v1.f.z), campos)*glm::sign(t.v1.f.z - campos.z);
 
         s.v2.i.x = (unsigned int)(((t.v2.f.x - campos.x) / (t.v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
         s.v2.i.y = (unsigned int)(((t.v2.f.y - campos.y) / (t.v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-        s.v2.i.z = glm::distance(glm::vec3(t.v2.f.x, t.v2.f.y, t.v2.f.z), campos);*/
+        s.v2.i.z = glm::distance(glm::vec3(t.v2.f.x, t.v2.f.y, t.v2.f.z), campos)*glm::sign(t.v2.f.z - campos.z);*/
         /// ---------------------------------------------------------- ///
 
         /// Rasterizer.cl port CPU)---------------------------------------- ///
-        triplet& s = triangles[i];
+        //triplet& s = triangles[i];
 
         glm::ivec2 a = glm::ivec2(s.v0.i.x, s.v0.i.y);
         glm::ivec2 b = glm::ivec2(s.v1.i.x, s.v1.i.y);
         glm::ivec2 c = glm::ivec2(s.v2.i.x, s.v2.i.y);
 
         local_aabb_buff[i].a = a;
-        local_aabb_buff[i].d0 = s.v0.i.z;
-        local_aabb_buff[i].d1 = s.v1.i.z;
-        local_aabb_buff[i].d2 = s.v2.i.z;
+        local_aabb_buff[i].d0 = s.v0.f.z;
+        local_aabb_buff[i].d1 = s.v1.f.z;
+        local_aabb_buff[i].d2 = s.v2.f.z;
         local_aabb_buff[i].triangle_id = i;
 
         local_aabb_buff[i].v0 = (glm::vec2)(b - a);
@@ -280,37 +380,58 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         local_aabb_buff[i].maxY = glm::max(glm::max(a.y, b.y), c.y);
 
         /// ---------------------------------------------------------- ///
+        bool skip = false;
+        //if (i > 0) { skip = true; }
+        
+        // Backface culling
+        /*if (glm::dot(triangle_refs[local_aabb_buff[i].triangle_id]->normal, glm::vec3(0,0,1)) < 0.0f) {
+            skip = true;
+        }*/
 
         /// AABB step CPU ---------------------------------------- ///
-        for (int x = local_aabb_buff[i].minX; x <= local_aabb_buff[i].maxX; x++) {
-            for (int y = local_aabb_buff[i].minY; y <= local_aabb_buff[i].maxY; y++) {
+        if (!skip) {
+            rendered_triangle_count++;
+
+            // (Naive clipping) Clamp to screen region
+            int minX = glm::clamp(local_aabb_buff[i].minX, 0, SCREEN_WIDTH);
+            int minY = glm::clamp(local_aabb_buff[i].minY, 0, SCREEN_HEIGHT);
+            int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, SCREEN_WIDTH);
+            int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, SCREEN_HEIGHT);
+
+            for (int x = minX; x <= maxX; x++) {
+                for (int y = minY; y <= maxY; y++) {
+
+                    if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
+                        glm::ivec2 v2 = glm::ivec2(x, y) - local_aabb_buff[i].a;
+                        glm::ivec2 v0 = local_aabb_buff[i].v0;
+                        glm::ivec2 v1 = local_aabb_buff[i].v1;
 
 
-                if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-                    glm::ivec2 v2 = glm::ivec2(x, y) - local_aabb_buff[i].a;
-                    glm::ivec2 v0 = local_aabb_buff[i].v0;
-                    glm::ivec2 v1 = local_aabb_buff[i].v1;
+                        float v = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
+                        float w = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
+                        float u = 1.f - v - w;
 
+                        if (/*0 ||*/ (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
+                            float depth = (u*local_aabb_buff[i].d0 + v*local_aabb_buff[i].d1 + w*local_aabb_buff[i].d2);
+                            float d = glm::min((frame_buffer[x + y * SCREEN_WIDTH].depth), depth);
+                            //std::cout << "DEPTH: " << depth << std::endl;
+                            if ( (d == depth || d == 0) && depth > znear && depth < zfar ) {
+                                //std::cout << "DEPTH: " << d << " " << depth << std::endl;
+                                frame_buffer[x + y*SCREEN_WIDTH].r = triangle_refs[i]->color.r*255;
+                                frame_buffer[x + y*SCREEN_WIDTH].g = triangle_refs[i]->color.g * 255;
+                                frame_buffer[x + y*SCREEN_WIDTH].b = triangle_refs[i]->color.b * 255;
 
-                    float v = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
-                    float w = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
-                    float u = 1.f - v - w;
-
-                    if (0 || (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
-                        float depth = (u*local_aabb_buff[i].d0 + v*local_aabb_buff[i].d1 + w*local_aabb_buff[i].d2);
-                        float d = glm::min((frame_buffer[x + y * SCREEN_WIDTH].depth), depth);
-                        if (d == depth || d == 0) {
-                            frame_buffer[x + y*SCREEN_WIDTH].r = 255;
-                            frame_buffer[x + y*SCREEN_WIDTH].depth = depth;
+                                frame_buffer[x + y*SCREEN_WIDTH].depth = depth;
+                            }
                         }
                     }
-                }
 
+                }
             }
         }
         /// ---------------------------------------------------------- ///
     }
-   
+    std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
 
 
     

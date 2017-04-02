@@ -25,6 +25,10 @@ kernel void projection(global triplet* const wst, global triplet* const sst, con
     uint id = get_global_id(0);
     global triplet* s = &(sst[id]);
     global triplet* t = &(wst[id]);
+	/*
+		TODO: 
+		- Projection needs to be converted to do proper projection. This only projects fo
+	*/
     //printf("Addresses: %d %d %d\n", s, t, sizeof(triplet));
 
     //for (int i = 0; i < 3; i++) {
@@ -35,20 +39,21 @@ kernel void projection(global triplet* const wst, global triplet* const sst, con
         //float3 vertex = (t->vertices[i].f[0], t->vertices[i].f[1], t->vertices[i].f[2]);
         //s->vertices[i].i[2] = fast_distance(vertex, campos);  
     //}
+	
 
     s->v0.i.x = (uint)(((t->v0.f.x - campos.x) / (t->v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
     s->v0.i.y = (uint)(((t->v0.f.y - campos.y) / (t->v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-    s->v0.i.z = distance((float3)(t->v0.f.x, t->v0.f.y, t->v0.f.z), campos);
+    s->v0.i.z = distance((float3)(t->v0.f.x, t->v0.f.y, t->v0.f.z), campos)*sign(t->v0.f.z - campos.z);
     //printf("%f %f %f => %d %d\n", t->v0.f.x, t->v0.f.y, t->v0.f.z, s->v0.i.x, s->v0.i.y);
 
     s->v1.i.x = (uint)(((t->v1.f.x - campos.x) / (t->v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
     s->v1.i.y = (uint)(((t->v1.f.y - campos.y) / (t->v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-    s->v1.i.z = distance((float3)(t->v1.f.x, t->v1.f.y, t->v1.f.z), campos);
+    s->v1.i.z = distance((float3)(t->v1.f.x, t->v1.f.y, t->v1.f.z), campos)*sign(t->v1.f.z - campos.z);
     //printf("%f %f %f => %d %d\n", t->v1.f.x, t->v1.f.y, t->v1.f.z, s->v1.i.x, s->v1.i.y);
 
     s->v2.i.x = (uint)(((t->v2.f.x - campos.x) / (t->v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
     s->v2.i.y = (uint)(((t->v2.f.y - campos.y) / (t->v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-    s->v2.i.z = distance((float3)(t->v2.f.x, t->v2.f.y, t->v2.f.z), campos);
+    s->v2.i.z = distance((float3)(t->v2.f.x, t->v2.f.y, t->v2.f.z), campos)*sign(t->v2.f.z - campos.z);
     //printf("%f %f %f => %d %d\n", t->v2.f.x, t->v2.f.y, t->v2.f.z, s->v2.i.x, s->v2.i.y);
 
 

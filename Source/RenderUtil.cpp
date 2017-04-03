@@ -205,8 +205,8 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     float campos2[] = { campos.x, campos.y, campos.z };
 
     // Camera Properties
-    float znear = 0.1f;
-    float zfar = 100.0f;
+    float znear = 0.25f;
+    float zfar = 10.0f;
     float FOV = 90.0f;
     float aspect = (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT;
 

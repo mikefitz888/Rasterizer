@@ -83,10 +83,26 @@ void RENDER::loadOCLKernels() {
         char options[128];
         sprintf(options, "-D SCREEN_WIDTH=%d -D SCREEN_HEIGHT=%d", SCREEN_WIDTH, SCREEN_HEIGHT);
         program->build({ *device }, options);
+        
+
         cl::Kernel* nKern = new cl::Kernel(*program, kernel_names[n].c_str(), &err);
-        if (err) {
+        if (err) {  
+
+            std::ofstream myfile;
+            myfile.open("kernel compile errors.txt");
+            myfile << program->getBuildInfo<CL_PROGRAM_BUILD_LOG>(*device);
+            myfile.close();
+
+            std::cout << "------------------ COMPILE ERRORS ------------------" << std::endl;
+            std::cout << " Error building: " << program->getBuildInfo<CL_PROGRAM_BUILD_LOG>(*device) << std::endl;
+            std::cout << "-----------------------------------------------------" << std::endl;
             printf("%d Error: %d, building %s\n", __LINE__, err, kernel_names[n].c_str());
             while (1);
+        } else {
+            std::ofstream myfile;
+            myfile.open("kernel compile errors.txt");
+            myfile << "Compilation Successful!" << std::endl;
+            myfile.close();
         }
         kernels.emplace(kernel_names[n], nKern);
         n++;
@@ -182,16 +198,31 @@ void RENDER::initialize() {
 void RENDER::addTriangle(Triangle& triangle) {
     triangle_refs.emplace_back(&triangle);
 }
-
 void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     float rendered_triangle_count = 0;
 
     //Project Triangles to screen-space
     float campos2[] = { campos.x, campos.y, campos.z };
 
+    // Camera Properties
+    float znear = 0.1f;
+    float zfar = 100.0f;
+    float FOV = 90.0f;
+    float aspect = (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT;
+
+    // Construct matrices
+    glm::mat4 VIEW_MATRIX       = glm::lookAt(campos, campos + glm::vec3(0.0, 0.0, 0.5f), glm::vec3(0, 1, 0));
+    glm::mat4 PROJECTION_MATRIX = glm::perspective(FOV*glm::pi<float>() / 180.0f, -((float)SCREEN_WIDTH / (float)SCREEN_HEIGHT), znear, zfar);
+    glm::mat4 CLIP_MATRIX       = glm::mat4((float)SCREEN_WIDTH / 2.0f, 0, 0, 0, 0, (float)SCREEN_HEIGHT / 2.0f, 0, 0, 0, 0, 0.5f, 0, (float)SCREEN_WIDTH / 2.0f, (float)SCREEN_HEIGHT / 2.0f, 0.5, 1);
+    //CLIP_MATRIX = glm::transpose(CLIP_MATRIX);
+
     //kernel void projection(global float3* const vertices, const float3 campos)
-    
-    kernels["projection"]->setArg(2, sizeof(cl_float3), campos2);
+    kernels["projection"]->setArg(2, sizeof(cl_float)*16, glm::value_ptr(VIEW_MATRIX));
+    kernels["projection"]->setArg(3, sizeof(cl_float)*16, glm::value_ptr(PROJECTION_MATRIX));
+    kernels["projection"]->setArg(4, sizeof(cl_float)*16, glm::value_ptr(CLIP_MATRIX));
+
+
+
     unsigned int number_of_triangles = triangle_refs.size();
     std::cout << "NUMBER OF TRIANGLES: " << number_of_triangles << std::endl;
 
@@ -201,14 +232,14 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     cl_int err = 0;
 
     /// PROJECTION STAGE (GPU) ---------------------------------------------------------------------------------------------------//
-    /*const cl::NDRange offset = cl::NDRange(0);
+    const cl::NDRange offset = cl::NDRange(0);
     const cl::NDRange global = cl::NDRange(number_of_triangles);
-    cl_int err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
+    err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
 
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
     // Dont need to copy this if running rasterization step
-    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);*/
+    queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
     ///---------------------------------------------------------------------------------------------------------------------//
 
 
@@ -244,14 +275,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     //if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     //queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
     ///---------------------------------------------------------------------------------------------------------------------//
-    // Camera Properties
-    float znear = 0.2f;
-    float zfar = 10.0f;
-    float FOV = 60.0f;
-
-    // Construct matrices
-    glm::mat4 VIEW_MATRIX = glm::lookAt(campos, glm::vec3(campos.x, campos.y, campos.z + 10.0f), glm::vec3(0, 1, 0));
-    glm::mat4 PROJECTION_MATRIX = glm::perspective(glm::radians(FOV), -((float)SCREEN_WIDTH / (float)SCREEN_HEIGHT), znear, zfar);
+    
 
     // AABB step CPU
 #pragma omp parallel for
@@ -266,15 +290,14 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         triplet s = triangles[i];
         triplet& t = triangles[i];
 
-        // Construct view matrix
-        //glm::mat4 VIEW_MATRIX = glm::mat4(1, 0, 0, -campos.x, 0, 1, 0, -campos.y, 0, 0, 1, -campos.z, 0, 0, 0, 1);
-        //VIEW_MATRIX = glm::transpose(VIEW_MATRIX);
-        
-
         // World pos
-        glm::vec4 world_pos_0(triangle_refs[i]->v0.x, triangle_refs[i]->v0.y, triangle_refs[i]->v0.z, 1);
+        /*glm::vec4 world_pos_0(triangle_refs[i]->v0.x, triangle_refs[i]->v0.y, triangle_refs[i]->v0.z, 1);
         glm::vec4 world_pos_1(triangle_refs[i]->v1.x, triangle_refs[i]->v1.y, triangle_refs[i]->v1.z, 1);
         glm::vec4 world_pos_2(triangle_refs[i]->v2.x, triangle_refs[i]->v2.y, triangle_refs[i]->v2.z, 1);
+
+        if (i == 0) {
+            std::cout << "W_CPU(" << world_pos_0.x << "," << world_pos_0.y << "," << world_pos_0.z << ")" << std::endl;
+        }
 
         // Transform to view position
         glm::vec4 view_pos0, view_pos1, view_pos2;
@@ -282,74 +305,58 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         view_pos1 = VIEW_MATRIX*world_pos_1;
         view_pos2 = VIEW_MATRIX*world_pos_2;
 
-        // Projection matrix
-        /*float y_scale = 1.0f / glm::tan(glm::radians(FOV / 2.0f));
-        float x_scale = y_scale / (SCREEN_WIDTH / SCREEN_HEIGHT);
-        float frustum_length = zfar - znear;
-        */
-        //glm::mat4 PROJECTION_MATRIX = glm::mat4(x_scale, 0, 0, 0, 0, y_scale, 0, 0, 0, 0, -((zfar + znear) / frustum_length), -1, 0, 0, -((2 * znear * zfar) / frustum_length), 0);
-        //PROJECTION_MATRIX = glm::transpose(PROJECTION_MATRIX);
-        
+        if (i == 0) {
+            std::cout << "V_CPU(" << view_pos0.x << "," << view_pos0.y << "," << view_pos0.z << ")" << std::endl;
+        }
 
+        // Projection
         glm::vec4 proj_pos0, proj_pos1, proj_pos2;
         proj_pos0 = PROJECTION_MATRIX*view_pos0;
         proj_pos1 = PROJECTION_MATRIX*view_pos1;
         proj_pos2 = PROJECTION_MATRIX*view_pos2;
-        
+
+        if (i == 0) {
+            std::cout << "P_CPU(" << proj_pos0.x << "," << proj_pos0.y << "," << proj_pos0.z << ")" << std::endl;
+        }
 
         // PERSPECTIVE DIVIDE
         proj_pos0 /= proj_pos0.w;
         proj_pos1 /= proj_pos1.w;
         proj_pos2 /= proj_pos2.w;
 
-        // CONVERT NDC
-        proj_pos0.x *= 0.5;
-        proj_pos0.x += 0.5;
+        if (i == 0) {
+            std::cout << "PD_CPU(" << proj_pos0.x << "," << proj_pos0.y << "," << proj_pos0.z << ")" << std::endl;
+        }
 
-        proj_pos0.y *= 0.5;
-        proj_pos0.y += 0.5;
-        
+        // Clipping
 
-        proj_pos1.x *= 0.5;
-        proj_pos1.x += 0.5;
-
-        proj_pos1.y *= 0.5;
-        proj_pos1.y += 0.5;
-
-        proj_pos2.x *= 0.5;
-        proj_pos2.x += 0.5;
-
-        proj_pos2.y *= 0.5;
-        proj_pos2.y += 0.5;
-        
-
-
-        // VIEWPORT TRANSFORM
-        proj_pos0.x *= SCREEN_WIDTH;
-        proj_pos1.x *= SCREEN_WIDTH;
-        proj_pos2.x *= SCREEN_WIDTH;
-
-        proj_pos0.y *= SCREEN_HEIGHT;
-        proj_pos1.y *= SCREEN_HEIGHT;
-        proj_pos2.y *= SCREEN_HEIGHT;
-
-        s.v0.i.x = (int)proj_pos0.x; 
-        s.v0.i.y = (int)proj_pos0.y;
-        s.v0.f.z = -view_pos0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
-
-        s.v1.i.x = (int)proj_pos1.x;
-        s.v1.i.y = (int)proj_pos1.y;
-        s.v1.f.z = -view_pos1.z;
-
-        s.v2.i.x = (int)proj_pos2.x;
-        s.v2.i.y = (int)proj_pos2.y;
-        s.v2.f.z = -view_pos2.z;
+        proj_pos0 = CLIP_MATRIX*proj_pos0;
+        proj_pos1 = CLIP_MATRIX*proj_pos1;
+        proj_pos2 = CLIP_MATRIX*proj_pos2;
 
         if (i == 0) {
-            //std::cout << (int)proj_pos0.x << " " << (int)proj_pos0.y << " " << view_pos0.z << std::endl;
-            //std::cout << (int)proj_pos1.x << " " << (int)proj_pos1.y << " " << view_pos1.z << std::endl;
-            //std::cout << (int)proj_pos2.x << " " << (int)proj_pos2.y << " " << view_pos2.z << std::endl;
+            std::cout << "C_CPU(" << proj_pos0.x << "," << proj_pos0.y << "," << proj_pos0.z << ")" << std::endl;
         }
+        // Collect result
+        s.v0.f.x = proj_pos0.x; 
+        s.v0.f.y = proj_pos0.y;
+        s.v0.f.z = -proj_pos0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
+
+        s.v1.f.x = proj_pos1.x;
+        s.v1.f.y = proj_pos1.y;
+        s.v1.f.z = -proj_pos0.z;
+
+        s.v2.f.x = proj_pos2.x;
+        s.v2.f.y = proj_pos2.y;
+        s.v2.f.z = -view_pos2.z;
+
+        std::cout << "DEPTH: " << s.v0.f.z << " " << s.v1.f.z << " " << s.v2.f.z << std::endl;*/
+
+        /*if (i == 0) {
+            std::cout << s.v0.f.x << " " << s.v0.f.y << " " << s.v0.f.z << std::endl;
+            std::cout << s.v1.f.x << " " << s.v1.f.y << " " << s.v1.f.z << std::endl;
+            std::cout << s.v2.f.x << " " << s.v2.f.y << " " << s.v2.f.z << std::endl;
+        }*/
 
 
         /*s.v0.i.x = (unsigned int)(((t.v0.f.x - campos.x) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
@@ -392,7 +399,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         bool skip = false;
 
         // Naive depth clipping
-        if (view_pos0.z >= 0 || view_pos1.z >= 0 || view_pos2.z >= 0) {
+        if (s.v0.f.z <= 0 || s.v1.f.z <= 0 || s.v2.f.z <= 0) {
             skip = true;
         }
         //if (i > 0) { skip = true; }
@@ -412,6 +419,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
             int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, SCREEN_WIDTH);
             int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, SCREEN_HEIGHT);
 
+
             for (int x = minX; x <= maxX; x++) {
                 for (int y = minY; y <= maxY; y++) {
 
@@ -420,20 +428,29 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
                         glm::ivec2 v0 = local_aabb_buff[i].v0;
                         glm::ivec2 v1 = local_aabb_buff[i].v1;
 
-
                         float v = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
                         float w = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
                         float u = 1.f - v - w;
 
                         if (/*0 ||*/ (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
                             float depth = (u*local_aabb_buff[i].d0 + v*local_aabb_buff[i].d1 + w*local_aabb_buff[i].d2);
-                            float d = glm::min((frame_buffer[x + y * SCREEN_WIDTH].depth), depth);
                             //std::cout << "DEPTH: " << depth << std::endl;
-                            if ( (d == depth || d == 0) && depth > znear && depth < zfar ) {
-                                //std::cout << "DEPTH: " << d << " " << depth << std::endl;
-                                frame_buffer[x + y*SCREEN_WIDTH].r = 255;//triangle_refs[i]->color.r*255;
-                                frame_buffer[x + y*SCREEN_WIDTH].g = triangle_refs[i]->color.g * 255;
-                                frame_buffer[x + y*SCREEN_WIDTH].b = triangle_refs[i]->color.b * 255;
+                            if ( (frame_buffer[x + y * SCREEN_WIDTH].depth == 0 || depth < frame_buffer[x + y * SCREEN_WIDTH].depth) && depth > znear && depth < zfar ) {
+                                
+                                
+                                // Get TX coord
+                                //float tx = triangle_refs[i]->uv0.x*u + triangle_refs[i]->uv1.x*v + triangle_refs[i]->uv2.x*w;
+                                //float ty = triangle_refs[i]->uv0.y*u + triangle_refs[i]->uv1.y*v + triangle_refs[i]->uv2.y*w;
+
+                                // Get Normal
+                                float nx = -(triangle_refs[i]->n0.x*u + triangle_refs[i]->n1.x*v + triangle_refs[i]->n2.x*w);
+                                float ny = -(triangle_refs[i]->n0.y*u + triangle_refs[i]->n1.y*v + triangle_refs[i]->n2.y*w);
+                                float nz = -(triangle_refs[i]->n0.z*u + triangle_refs[i]->n1.z*v + triangle_refs[i]->n2.z*w);
+
+
+                                frame_buffer[x + y*SCREEN_WIDTH].r = 255 * (nx*0.5 + 0.5);//triangle_refs[i]->color.r*255;
+                                frame_buffer[x + y*SCREEN_WIDTH].g = 255 * (ny*0.5 + 0.5);
+                                frame_buffer[x + y*SCREEN_WIDTH].b = 255 * (nz*0.5 + 0.5);
 
                                 frame_buffer[x + y*SCREEN_WIDTH].depth = depth;
                             }

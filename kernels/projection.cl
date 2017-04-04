@@ -45,17 +45,17 @@ inline fvec4 mul(fvec4 input, mat4 mat) {
 
 typedef struct { 
     uint x, y;
-    float z;
-} ivec3;
+    float z, w;
+} ivec4;
 
 
 typedef union {
-    fvec3 f;
-    ivec3 i;
-} ufvec3;
+    fvec4 f;
+    ivec4 i;
+} ufvec4;
 
 typedef struct __attribute__((packed)) {
-    ufvec3 v0, v1, v2;
+    ufvec4 v0, v1, v2;
     uint id;
 } triplet;
 
@@ -83,28 +83,42 @@ kernel void projection(global triplet* const wst, global triplet* sst, const mat
     proj_pos2 = mul(view_pos2, PROJECTION_MATRIX);
 
     // PERSPECTIVE DIVIDE
-    proj_pos0.x /= proj_pos0.w; proj_pos0.y /= proj_pos0.w; proj_pos0.z /= proj_pos0.w; proj_pos0.w = 1.0f;
-    proj_pos1.x /= proj_pos1.w; proj_pos1.y /= proj_pos1.w; proj_pos1.z /= proj_pos1.w; proj_pos1.w = 1.0f;
-    proj_pos2.x /= proj_pos2.w; proj_pos2.y /= proj_pos2.w; proj_pos2.z /= proj_pos2.w; proj_pos2.w = 1.0f;
+    proj_pos0.x /= proj_pos0.w; proj_pos0.y /= proj_pos0.w; proj_pos0.z /= proj_pos0.w; //proj_pos0.w = 1.0f;
+    proj_pos1.x /= proj_pos1.w; proj_pos1.y /= proj_pos1.w; proj_pos1.z /= proj_pos1.w; //proj_pos1.w = 1.0f;
+    proj_pos2.x /= proj_pos2.w; proj_pos2.y /= proj_pos2.w; proj_pos2.z /= proj_pos2.w; //proj_pos2.w = 1.0f;
 
 
     // Clipping
-    proj_pos0 = mul(proj_pos0, CLIP_MATRIX);
+    /*proj_pos0 = mul(proj_pos0, CLIP_MATRIX);
     proj_pos1 = mul(proj_pos1, CLIP_MATRIX);
-    proj_pos2 = mul(proj_pos2, CLIP_MATRIX);
+    proj_pos2 = mul(proj_pos2, CLIP_MATRIX);*/
+    proj_pos0.x *= 0.5f; proj_pos0.x += 0.5f;
+    proj_pos0.y *= 0.5f; proj_pos0.y += 0.5f;
+    proj_pos0.x *= 600.0f; proj_pos0.y *= 480.0f;
+
+    proj_pos1.x *= 0.5f; proj_pos1.x += 0.5f;
+    proj_pos1.y *= 0.5f; proj_pos1.y += 0.5f;
+    proj_pos1.x *= 600.0f; proj_pos1.y *= 480.0f;
+
+    proj_pos2.x *= 0.5f; proj_pos2.x += 0.5f;
+    proj_pos2.y *= 0.5f; proj_pos2.y += 0.5f;
+    proj_pos2.x *= 600.0f; proj_pos2.y *= 480.0f;
 
     // Collect result
     s.v0.f.x = proj_pos0.x;
     s.v0.f.y = proj_pos0.y;
     s.v0.f.z = -view_pos0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
+    s.v0.f.w = proj_pos0.w;
 
     s.v1.f.x = proj_pos1.x;
     s.v1.f.y = proj_pos1.y;
     s.v1.f.z = -view_pos1.z;
+    s.v0.f.w = proj_pos1.w;
 
     s.v2.f.x = proj_pos2.x;
     s.v2.f.y = proj_pos2.y;
     s.v2.f.z = -view_pos2.z;
+    s.v2.f.w = proj_pos2.w;
 
     sst[id] = s;
 }

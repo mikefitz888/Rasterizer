@@ -45,7 +45,7 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
         float3 wpos = (float3)(frag.x, frag.y, frag.z);
 
         // Perform sample
-        wpos += sample_kernel[i]*0.01f; // Re-scale
+        wpos += sample_kernel[i]*1.0f; // Re-scale
 
         // Project sample pos
         float4 projected_kernel_vector = mul((float4)(wpos.x, wpos.y, wpos.z, 1.0f), MVP_MATRIX);
@@ -87,8 +87,8 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
         projected_sample.y *= 480.0f;
 
         // If kernel vector depth is greated than the sampled result stored in the array, occlusion occurs
-        if (projected_sample.z < projected_kernel_vector.z) {
-            sample_result += 1.0f;
+        if (projected_sample.z < projected_kernel_vector.z /*&& (projected_kernel_vector.z-projected_sample.z) < 0.025f*/) {
+            sample_result += length(sample_kernel[i]);
         }
         
 
@@ -96,6 +96,7 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
     // Normalize result
     sample_result /= (float)sample_count;
 
+    sample_result = pow(sample_result, 5.0f)*3.8f; // Power improves the gradient, strength (the 2.5f) improves the intensity
     // Invert
     sample_result = 1.0f - sample_result;
 

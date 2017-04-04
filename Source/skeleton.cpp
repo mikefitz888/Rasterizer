@@ -95,7 +95,7 @@ int main( int argc, char* argv[] )
     Pixel* ssao_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
     
     // Generate SSAO Kernel
-    int sample_count = 16;
+    int sample_count = 128;
     RENDER::buildSSAOSampleKernel(sample_count);
 
 	while( NoQuitMessageSDL() && running )
@@ -225,36 +225,37 @@ void Update()
     }
 
     // Camera controls
+    float cam_speed = 0.75f;
     if (keystate[SDLK_w]) {
         // Move camera forward
-        campos += camdir * 0.35f;
+        campos += camdir * cam_speed;
     }
     if (keystate[SDLK_s]) {
         // Move camera backward
-        campos -= camdir * 0.35f;
+        campos -= camdir * cam_speed;
     }
     if (keystate[SDLK_a]) {
         // Move camera to the left
         glm::vec3 rot = glm::rotateY(camdir, glm::pi<float>() / 2);
         rot.y = 0.0f;
         rot = glm::normalize(rot);
-        campos -= rot * 0.35f;
+        campos -= rot * cam_speed;
     }
     if (keystate[SDLK_d]) {
         // Move camera to the right
         glm::vec3 rot = glm::rotateY(camdir, glm::pi<float>() / 2);
         rot.y = 0.0f;
         rot = glm::normalize(rot);
-        campos += rot * 0.35f;
+        campos += rot * cam_speed;
     }
 
     if (keystate[SDLK_e]) {
         // Move camera to the left
-        campos.y += 0.35f;
+        campos.y += cam_speed;
     }
     if (keystate[SDLK_q]) {
         // Move 
-        campos.y -= 0.35f;
+        campos.y -= cam_speed;
     }
 
     // Smooth camera

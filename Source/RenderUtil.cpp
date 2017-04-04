@@ -151,9 +151,9 @@ void RENDER::writeTriangles() {
         materials[i].g = t->color.g;
         materials[i].b = t->color.b;
 
-        triangles[i].v0.f = t->v0;
-        triangles[i].v1.f = t->v1;
-        triangles[i].v2.f = t->v2;
+        triangles[i].v0.f = glm::vec4(t->v0.x, t->v0.y, t->v0.z, 1.0f);
+        triangles[i].v1.f = glm::vec4(t->v1.x, t->v1.y, t->v1.z, 1.0f);
+        triangles[i].v2.f = glm::vec4(t->v2.x, t->v2.y, t->v2.z, 1.0f);
         triangles[i].id = i;
         //printf("%f %f %f, %f %f %f, %f %f %f\n", t->v0.x, t->v0.y, t->v0.z, t->v1.x, t->v1.y, t->v1.z, t->v2.x, t->v2.y, t->v2.z);
     }
@@ -384,6 +384,10 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
             int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, WIDTH -1);
             int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, HEIGHT-1);
 
+            //if (i == 0) {
+            //    std::cout << "W: " << s.v0.f.w << std::endl;
+            //}
+
             for (int x = minX; x <= maxX; x++) {
                 for (int y = minY; y <= maxY; y++) {
 
@@ -392,25 +396,45 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
                         glm::ivec2 v0 = local_aabb_buff[i].v0;
                         glm::ivec2 v1 = local_aabb_buff[i].v1;
 
-                        float v = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
-                        float w = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
-                        float u = 1.f - v - w;
+                        float b = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
+                        float c = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
+                        float a = 1.0f - b - c;
 
-                        if ((u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
-                            float depth = (u*local_aabb_buff[i].d0 + v*local_aabb_buff[i].d1 + w*local_aabb_buff[i].d2);
+
+
+
+                        if ((a <= 1 && b <= 1 && c <= 1 && a >= 0 && b >= 0 && c >= 0)) {
+                            float depth = (a*local_aabb_buff[i].d0 + b*local_aabb_buff[i].d1 + c*local_aabb_buff[i].d2);
                             //std::cout << "DEPTH: " << depth << std::endl;
                             if ( (frame_buffer[x + y * WIDTH].depth == 0 || depth < frame_buffer[x + y * WIDTH].depth) && depth > znear && depth < zfar ) {
                                 
                                 // Store triangle
                                 frame_buffer[x + y*WIDTH].triangle_id = i;
 
-                                // Store interpolators
-                                frame_buffer[x + y*WIDTH].va = u;
-                                frame_buffer[x + y*WIDTH].vb = v;
-                                frame_buffer[x + y*WIDTH].vc = w;
+                                // Store (PERSPECTIVE CORRECT? Maybe?) interpolators
+                                /*float zf = a / s.v0.f.z + b / s.v1.f.z + c / s.v2.f.z;
+                                frame_buffer[x + y*WIDTH].va = a / (s.v0.f.z*zf);
+                                frame_buffer[x + y*WIDTH].vb = b / (s.v1.f.z*zf);
+                                frame_buffer[x + y*WIDTH].vc = c / (s.v2.f.z*zf);*/
+
+                               /* float zz = 1 / (a * 1.0/s.v0.f.z + b * 1.0/s.v1.f.z + c * 1.0/s.v2.f.z);
+                                frame_buffer[x + y*WIDTH].va = a*zz/s.v0.f.z;
+                                frame_buffer[x + y*WIDTH].vb = b*zz/s.v1.f.z;
+                                frame_buffer[x + y*WIDTH].vc = c*zz/s.v2.f.z;*/
+
+                                frame_buffer[x + y*WIDTH].va = a;
+                                frame_buffer[x + y*WIDTH].vb = b;
+                                frame_buffer[x + y*WIDTH].vc = c;
 
                                 // Write interpolated depth
                                 frame_buffer[x + y*WIDTH].depth = depth;
+
+                                // Perspective correct UV:
+                                
+                                /*float perspCorrU = (a*triangle_refs[i]->uv0.x / s.v0.f.z + b*triangle_refs[i]->uv1.x / s.v1.f.z + c*triangle_refs[i]->uv2.x / s.v2.f.z) / zf;
+                                float perspCorrV = (a*triangle_refs[i]->uv0.y / s.v0.f.z + b*triangle_refs[i]->uv1.y / s.v1.f.z + c*triangle_refs[i]->uv2.y / s.v2.f.z) / zf;
+                                frame_buffer[x + y*WIDTH].uvx = perspCorrU;
+                                frame_buffer[x + y*WIDTH].uvy = perspCorrV;*/
                             }
                         }
                    // }

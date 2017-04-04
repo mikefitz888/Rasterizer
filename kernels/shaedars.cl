@@ -69,7 +69,7 @@ kernel void shaedars(global Fragment* fragment_buffer, global Material* const ma
 
     float ty = t.uv0.y*u + t.uv1.y*v + t.uv2.y*w;
     frag.uvx = tx;
-    frag.uvx = ty;
+    frag.uvy = ty;
 
     // Get interpolated Normal
     float nx = -(t.n0.x*u + t.n1.x*v + t.n2.x*w);
@@ -95,9 +95,11 @@ kernel void shaedars(global Fragment* fragment_buffer, global Material* const ma
 
     /// ---------------------------------------------------------- ///
     // TEMP - visualise normals
-    frag.r = 255 * (frag.nx*0.5 + 0.5);
+   /* frag.r = 255 * (frag.nx*0.5 + 0.5);
     frag.g = 255 * (frag.ny*0.5 + 0.5);
-    frag.b = 255 * (frag.nz*0.5 + 0.5);
+    frag.b = 255 * (frag.nz*0.5 + 0.5);*/
+    frag.r = 255 * frag.uvx;
+    frag.g = 255 * frag.uvy;
     
 
     // Reset depth

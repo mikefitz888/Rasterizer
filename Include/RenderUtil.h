@@ -18,14 +18,14 @@
 #include <fstream>
 #include <ctime>
 
-union ufvec3 {
-    glm::vec3 f;
-    glm::vec3 i;
-    inline ufvec3() {}
+union ufvec4 {
+    glm::vec4 f;
+    glm::vec4 i;
+    inline ufvec4() {}
 };
 
 struct triplet {
-    ufvec3 v0, v1, v2;
+    ufvec4 v0, v1, v2;
     //glm::vec3 face_normal, n0, n1, n2;
     unsigned int id;
     inline unsigned int minY() const { return std::min(std::min(v0.i.y, v1.i.y), v2.i.y); }

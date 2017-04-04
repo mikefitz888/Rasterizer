@@ -1,3 +1,16 @@
+/// ---------- PROPERTIES -------------
+/*
+    POWER     - controls the gradient of the AO. (higher intensity inner regions)
+    STRENGTH  - controls the overall darkness of the AO. A higher strength will result in more impactful AO, though it will also highlight artifacts more.
+    MAX_RANGE - controls the range at which a surface can cast occlusion onto another. If this is too high, you will get an effect called haloing which results in objects casting AO onto things that are far away.
+*/
+#define POWER 5.0f
+#define STRENGTH 4.8f
+#define MAX_RANGE 7.0f
+
+
+
+///////////////////
 typedef struct __attribute__((packed, aligned(4))) {
     uchar r, g, b, a;
     uint triangle_id;
@@ -86,8 +99,8 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
         projected_sample.x *= 600.0f;
         projected_sample.y *= 480.0f;
 
-        // If kernel vector depth is greated than the sampled result stored in the array, occlusion occurs
-        if (projected_sample.z < projected_kernel_vector.z /*&& (projected_kernel_vector.z-projected_sample.z) < 0.025f*/) {
+        // If kernel vector depth is greated than the sampled result stored in the array, occlusion occurs. We then have to perform the range check to verify the occluding surface is nearby in world-space
+        if (projected_sample.z < projected_kernel_vector.z && length((float3)(sample_fragment.x-frag.x, sample_fragment.y-frag.y, sample_fragment.z-frag.z)) < MAX_RANGE) {
             sample_result += length(sample_kernel[i]);
         }
         
@@ -96,7 +109,7 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
     // Normalize result
     sample_result /= (float)sample_count;
 
-    sample_result = pow(sample_result, 5.0f)*3.8f; // Power improves the gradient, strength (the 2.5f) improves the intensity
+    sample_result = clamp(pow(sample_result, POWER)*STRENGTH, 0.0f, 1.0f);//3.8f // Power improves the gradient, strength (the 2.5f) improves the intensity
     // Invert
     sample_result = 1.0f - sample_result;
 

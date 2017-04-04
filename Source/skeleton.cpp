@@ -95,7 +95,7 @@ int main( int argc, char* argv[] )
     Pixel* ssao_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
     
     // Generate SSAO Kernel
-    int sample_count = 128;
+    int sample_count = 96;
     RENDER::buildSSAOSampleKernel(sample_count);
 
 	while( NoQuitMessageSDL() && running )
@@ -122,8 +122,13 @@ int main( int argc, char* argv[] )
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
                 Pixel& p = ssao_buffer[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
+                Pixel& p2 = frame_buffer[x + y * SCREEN_WIDTH];
+                
+                
+                
                 Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
-                *a = SDL_MapRGB(screen->format, p.r, p.g, p.b);
+                *a = SDL_MapRGB(screen->format, ((float)p.r/255.0f*(float)p2.r/255.0f)*255, ((float)p.g/255.0f*(float)p2.g/255.0f) * 255, ((float)p.b/255.0f*(float)p2.b/255.0f)* 255);
+                //*a = SDL_MapRGB(screen->format, p.r, p.g, p.b);
 
                 //PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
 

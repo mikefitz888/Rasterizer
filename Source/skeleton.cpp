@@ -7,7 +7,9 @@
 #include <math.h>
 #undef size_t
 #include <SDL.h>
+#include <SDL_video.h>
 #include "../Include/SDLauxiliary.h"
+#include <glm/gtx/rotate_vector.hpp>
 #undef main
 #include "../Include/RenderUtil.h"
 
@@ -43,7 +45,14 @@ using glm::mat3;
 SDL_Surface* screen;
 int t;
 glm::vec3 campos(0.0, 0.0, -3.0);
+glm::vec3 camposs = campos;
+glm::vec3 camdir(0.0f, 0.0f, 1.0f);
 bool running = true;
+
+float yaw = 0.0f, pitch = 0.0f;
+float yaws = 0.0f, pitchs = 0.0f;
+bool mouse_look_enabled = true;
+bool p_pressed = false;
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
@@ -88,7 +97,7 @@ int main( int argc, char* argv[] )
 	while( NoQuitMessageSDL() && running )
 	{
 		Update(); 
-        RENDER::renderFrame(frame_buffer, campos);
+        RENDER::renderFrame(frame_buffer, camposs, camdir);
         
         if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
@@ -122,7 +131,7 @@ int main( int argc, char* argv[] )
 void Update()
 {
     Uint8* keystate = SDL_GetKeyState(0);
-    if (keystate[SDLK_UP]) {
+    /*if (keystate[SDLK_UP]) {
         // Move camera forward
         campos.z += 0.080f;
     }
@@ -146,11 +155,89 @@ void Update()
     if (keystate[SDLK_PAGEDOWN]) {
         // Move 
         campos.y += 0.080f;
-    }
+    }*/
 
     if (keystate[SDLK_ESCAPE]) {
         running = false;
     }
+
+    if (keystate[SDLK_p] && !p_pressed) {
+        mouse_look_enabled = !mouse_look_enabled;
+        p_pressed = true;
+    }
+    if (!keystate[SDLK_p]) {
+        p_pressed = false;
+    }
+
+    if (mouse_look_enabled) {
+        // Mouse look
+        int mouse_x, mouse_y;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+
+        int dx, dy;
+        dx = mouse_x - SCREEN_WIDTH/2;
+        dy = SCREEN_HEIGHT/2 - mouse_y;
+
+        std::cout << "dx: " << dx << std::endl;
+        std::cout << "dy: " << dy << std::endl;
+
+        yaw -= (float)dx*0.005f;
+        pitch -= (float)dy*0.005f;
+
+        yaws += (yaw - yaws)*0.30f;
+        pitchs += (pitch - pitchs)*0.30f;
+
+
+        camdir.x = cos(yaws) * cos(pitchs);
+        camdir.z = sin(yaws) * cos(pitchs);
+        camdir.y = sin(pitchs);
+
+        camdir = glm::normalize(camdir);
+
+        /*camdir = glm::rotateX(camdir, dy*0.001f);
+        camdir = glm::rotateY(camdir, dx*0.001f);
+        camdir = glm::normalize(camdir);*/
+
+
+        // Lock mouse
+        SDL_WarpMouse(SCREEN_WIDTH/2, SCREEN_HEIGHT/2);
+    }
+
+    // Camera controls
+    if (keystate[SDLK_w]) {
+        // Move camera forward
+        campos += camdir * 0.35f;
+    }
+    if (keystate[SDLK_s]) {
+        // Move camera backward
+        campos -= camdir * 0.35f;
+    }
+    if (keystate[SDLK_a]) {
+        // Move camera to the left
+        glm::vec3 rot = glm::rotateY(camdir, glm::pi<float>() / 2);
+        rot.y = 0.0f;
+        rot = glm::normalize(rot);
+        campos -= rot * 0.35f;
+    }
+    if (keystate[SDLK_d]) {
+        // Move camera to the right
+        glm::vec3 rot = glm::rotateY(camdir, glm::pi<float>() / 2);
+        rot.y = 0.0f;
+        rot = glm::normalize(rot);
+        campos += rot * 0.35f;
+    }
+
+    if (keystate[SDLK_e]) {
+        // Move camera to the left
+        campos.y += 0.35f;
+    }
+    if (keystate[SDLK_q]) {
+        // Move 
+        campos.y -= 0.35f;
+    }
+
+    // Smooth camera
+    camposs += (campos - camposs)*0.30f;
 
 	// Compute frame time:
 	int t2 = SDL_GetTicks();

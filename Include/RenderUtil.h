@@ -124,7 +124,7 @@ public:
 
     static void addTriangle(Triangle& triangle);
 
-    static void renderFrame(Pixel* frame_buffer, glm::vec3 campos);
+    static void renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir);
 
     static void release();
 };

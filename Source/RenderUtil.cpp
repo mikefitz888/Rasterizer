@@ -208,7 +208,7 @@ void RENDER::initialize() {
 void RENDER::addTriangle(Triangle& triangle) {
     triangle_refs.emplace_back(&triangle);
 }
-void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
+void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir) {
 
    
 
@@ -219,12 +219,12 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
 
     // Camera Properties
     float znear = 0.5f;
-    float zfar = 50.0f;
+    float zfar = 250.0f;
     float FOV = 70.0f;
     float aspect = (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT;
 
     // Construct matrices
-    glm::mat4 VIEW_MATRIX       = glm::lookAt(campos, campos + glm::vec3(0.0, 0.0, 0.5f), glm::vec3(0, 1, 0));
+    glm::mat4 VIEW_MATRIX       = glm::lookAt(campos, campos + camdir, glm::vec3(0, 1, 0));
     glm::mat4 PROJECTION_MATRIX = glm::perspective(FOV*glm::pi<float>() / 180.0f, -((float)SCREEN_WIDTH / (float)SCREEN_HEIGHT), znear, zfar);
     glm::mat4 CLIP_MATRIX       = glm::mat4((float)SCREEN_WIDTH / 2.0f, 0, 0, 0, 0, (float)SCREEN_HEIGHT / 2.0f, 0, 0, 0, 0, 0.5f, 0, (float)SCREEN_WIDTH / 2.0f, (float)SCREEN_HEIGHT / 2.0f, 0.5, 1);
     //CLIP_MATRIX = glm::transpose(CLIP_MATRIX);
@@ -360,7 +360,9 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         //if (i > 0) { skip = true; }
         
         // Backface culling
-        if (glm::dot(triangle_refs[local_aabb_buff[i].triangle_id]->normal, glm::vec3(0,0,1)) < 0.0f) {
+        //triangle_refs[local_aabb_buff[i].triangle_id]->ComputeNormal();
+        glm::vec3 cam_to_face = triangle_refs[local_aabb_buff[i].triangle_id]->v0 - campos;
+        if (glm::dot(triangle_refs[local_aabb_buff[i].triangle_id]->normal, cam_to_face) <= 0.0f) {
             skip = true;
         }
 

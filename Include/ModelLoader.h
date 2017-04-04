@@ -110,6 +110,7 @@ namespace model {
 						vertex_normals[normalIndices[i + 1]],
 						vertex_normals[normalIndices[i + 2]]
 					);
+                    triangles[i/3].ComputeNormal();
 				}
 			}
 			return &triangles;

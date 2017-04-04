@@ -8,6 +8,7 @@
 #include <iostream>
 #include <glm/glm.hpp>
 #include "Triangle.h"
+#include <SDL_mouse.h>
 
 // Initializes SDL (video and timer). SDL creates a window where you can draw.
 // A pointer to this SDL_Surface is returned. After calling this function

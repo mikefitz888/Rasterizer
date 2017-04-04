@@ -74,7 +74,7 @@ int main( int argc, char* argv[] )
     LoadTestModel(model);
 
     model::Scene scene;
-    //scene.addTriangles(model);
+    //scene.addTriangles(model);p
     
     //RENDER::addTriangle(scene.getTrianglesRef()[0]);
     model::Model m("wall.obj");
@@ -97,7 +97,14 @@ int main( int argc, char* argv[] )
 	while( NoQuitMessageSDL() && running )
 	{
 		Update(); 
+
+        clock_t b = clock();
         RENDER::renderFrame(frame_buffer, camposs, camdir);
+        clock_t e = clock();
+
+        double elapsed_secs = 1000 * double(e - b) / CLOCKS_PER_SEC;
+        std::cout << "FULL FRAME RASTER: " << elapsed_secs << "ms" << std::endl;
+        
         
         if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
@@ -105,9 +112,11 @@ int main( int argc, char* argv[] )
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
                 Pixel& p = frame_buffer[x + y * SCREEN_WIDTH];
-                
-                PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
-                p = {}; //C++11 method of clearing struct (Pixel in this case, this resets all values so maybe be careful)
+                Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
+                *a = SDL_MapRGB(screen->format, p.r, p.g, p.b);
+
+                //PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
+                //p = {}; //C++11 method of clearing struct (Pixel in this case, this resets all values so maybe be careful)
             }
         }
 
@@ -244,6 +253,7 @@ void Update()
 	float dt = float(t2-t);
 	t = t2;
 	cout << "Render time: " << dt << " ms." << endl;
+    std::cout << "-------------------------------------------" << std::endl;
 }
 
 void Draw(model::Scene& scene)

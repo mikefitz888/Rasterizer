@@ -365,7 +365,6 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
         if (glm::dot(triangle_refs[local_aabb_buff[i].triangle_id]->normal, cam_to_face) <= 0.0f) {
             skip = true;
         }
-
         /// AABB step CPU ---------------------------------------- ///
         if (!skip) {
             rendered_triangle_count++;
@@ -387,8 +386,12 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
                         float v = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
                         float w = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
                         float u = 1.f - v - w;
+                        
+                     /*  float v = 0.5f;
+                        float w = 0.5f;
+                        float u = 0.5f;*/
 
-                        if (/*0 ||*/ (u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
+                        if ((u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
                             float depth = (u*local_aabb_buff[i].d0 + v*local_aabb_buff[i].d1 + w*local_aabb_buff[i].d2);
                             //std::cout << "DEPTH: " << depth << std::endl;
                             if ( (frame_buffer[x + y * SCREEN_WIDTH].depth == 0 || depth < frame_buffer[x + y * SCREEN_WIDTH].depth) && depth > znear && depth < zfar ) {
@@ -484,7 +487,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
     /// ---------------------------------------------------------- ///
 
     std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
-    std::cout << "-------------------------------------------" << std::endl;
+    
 
 
     //TODO: generate fragments, maybe cpu is best for this, gpus normally do it in hardware

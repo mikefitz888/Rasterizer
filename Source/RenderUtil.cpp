@@ -370,15 +370,15 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
             rendered_triangle_count++;
 
             // (Naive clipping) Clamp to screen region
-            int minX = glm::clamp(local_aabb_buff[i].minX, 0, SCREEN_WIDTH);
-            int minY = glm::clamp(local_aabb_buff[i].minY, 0, SCREEN_HEIGHT);
-            int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, SCREEN_WIDTH);
-            int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, SCREEN_HEIGHT);
+            int minX = glm::clamp(local_aabb_buff[i].minX, 0, SCREEN_WIDTH-1);
+            int minY = glm::clamp(local_aabb_buff[i].minY, 0, SCREEN_HEIGHT-1);
+            int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, SCREEN_WIDTH-1);
+            int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, SCREEN_HEIGHT-1);
 
             for (int x = minX; x <= maxX; x++) {
                 for (int y = minY; y <= maxY; y++) {
 
-                    if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
+                   // if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
                         glm::ivec2 v2 = glm::ivec2(x, y) - local_aabb_buff[i].a;
                         glm::ivec2 v0 = local_aabb_buff[i].v0;
                         glm::ivec2 v1 = local_aabb_buff[i].v1;
@@ -408,7 +408,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
                                 frame_buffer[x + y*SCREEN_WIDTH].depth = depth;
                             }
                         }
-                    }
+                   // }
 
                 }
             }

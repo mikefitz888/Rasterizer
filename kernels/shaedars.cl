@@ -101,7 +101,7 @@ kernel void shaedars(global Fragment* fragment_buffer, global Material* const ma
     
 
     // Reset depth
-    frag.depth = 0.0f;
+    //frag.depth = 0.0f;
 
     // Write out result:
     fragment_buffer[id] = frag;

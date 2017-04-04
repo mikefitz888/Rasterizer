@@ -13,6 +13,7 @@
 //#include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/random.hpp>
 #include <iostream>
 #include <fstream>
 #include <ctime>
@@ -82,6 +83,10 @@ struct AABB {
 class RENDER {
     //static Pixel frame_buff[SCREEN_WIDTH * SCREEN_HEIGHT];
     static cl::Buffer* frame_buff;
+    static cl::Buffer* ssao_buff;
+    static cl::Buffer* ssao_sample_kernel;
+    static int sample_count;
+    static glm::vec3* ssao_sample_kernel_vals;
     static cl::Buffer* triangle_buff;
     static cl::Buffer* screen_space_buff;
     static cl::Buffer* material_buffer;
@@ -124,8 +129,9 @@ public:
 
     static void addTriangle(Triangle& triangle);
 
-    static void renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir);
-
+    static void renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir);
+    static void calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir);
+    static void buildSSAOSampleKernel(int sample_count);
     static void release();
 };
 

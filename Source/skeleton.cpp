@@ -92,14 +92,24 @@ int main( int argc, char* argv[] )
     RENDER::initialize(); //Triangles must be loaded to RENDER before this is called; "void RENDER::addTriangle(Triangle& triangle)"
     
     Pixel* frame_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
+    Pixel* ssao_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
     
-    
+    // Generate SSAO Kernel
+    int sample_count = 16;
+    RENDER::buildSSAOSampleKernel(sample_count);
+
 	while( NoQuitMessageSDL() && running )
 	{
 		Update(); 
 
         clock_t b = clock();
-        RENDER::renderFrame(frame_buffer, camposs, camdir);
+
+        // Render main frame
+        RENDER::renderFrame(frame_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
+
+        // Render SSAO buffer
+        RENDER::calculateSSAO(ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
+
         clock_t e = clock();
 
         double elapsed_secs = 1000 * double(e - b) / CLOCKS_PER_SEC;
@@ -111,12 +121,14 @@ int main( int argc, char* argv[] )
 #pragma omp parallel for
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
-                Pixel& p = frame_buffer[x + y * SCREEN_WIDTH];
+                Pixel& p = ssao_buffer[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
                 Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
                 *a = SDL_MapRGB(screen->format, p.r, p.g, p.b);
 
                 //PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
-                //p = {}; //C++11 method of clearing struct (Pixel in this case, this resets all values so maybe be careful)
+
+                // Clear
+                frame_buffer[x + y * SCREEN_WIDTH].depth = 0;
             }
         }
 

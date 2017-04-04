@@ -8,6 +8,11 @@ cl::Buffer* RENDER::screen_space_buff;
 cl::Buffer* RENDER::material_buffer;
 cl::Buffer* RENDER::aabb_buffer;
 
+cl::Buffer* RENDER::ssao_buff;
+cl::Buffer* RENDER::ssao_sample_kernel;
+int RENDER::sample_count = 0;
+glm::vec3* RENDER::ssao_sample_kernel_vals;
+
 std::vector<Triangle*> RENDER::triangle_refs;
 triplet* RENDER::triangles;
 Material* RENDER::materials;
@@ -60,7 +65,7 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::vector<std::string> kernel_names = { "rasterizer", "projection", "shaedars", "aabb" };
+    std::vector<std::string> kernel_names = { "rasterizer", "projection", "shaedars", "aabb", "ssao" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -128,6 +133,10 @@ void RENDER::allocateOCLBuffers() {
     screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(triplet) * triangle_refs.size());
     material_buffer = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Material) * triangle_refs.size());
     aabb_buffer = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(AABB) * triangle_refs.size());
+
+    // SSAO
+    ssao_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
+    
 }
 
 void RENDER::writeTriangles() {
@@ -208,7 +217,7 @@ void RENDER::initialize() {
 void RENDER::addTriangle(Triangle& triangle) {
     triangle_refs.emplace_back(&triangle);
 }
-void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir) {
+void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir) {
 
    
 
@@ -221,12 +230,12 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
     float znear = 0.5f;
     float zfar = 250.0f;
     float FOV = 70.0f;
-    float aspect = (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT;
+    float aspect = (float)WIDTH / (float)HEIGHT;
 
     // Construct matrices
     glm::mat4 VIEW_MATRIX       = glm::lookAt(campos, campos + camdir, glm::vec3(0, 1, 0));
-    glm::mat4 PROJECTION_MATRIX = glm::perspective(FOV*glm::pi<float>() / 180.0f, -((float)SCREEN_WIDTH / (float)SCREEN_HEIGHT), znear, zfar);
-    glm::mat4 CLIP_MATRIX       = glm::mat4((float)SCREEN_WIDTH / 2.0f, 0, 0, 0, 0, (float)SCREEN_HEIGHT / 2.0f, 0, 0, 0, 0, 0.5f, 0, (float)SCREEN_WIDTH / 2.0f, (float)SCREEN_HEIGHT / 2.0f, 0.5, 1);
+    glm::mat4 PROJECTION_MATRIX = glm::perspective(FOV*glm::pi<float>() / 180.0f, -((float)WIDTH / (float)HEIGHT), znear, zfar);
+    glm::mat4 CLIP_MATRIX       = glm::mat4((float)WIDTH / 2.0f, 0, 0, 0, 0, (float)HEIGHT / 2.0f, 0, 0, 0, 0, 0.5f, 0, (float)WIDTH / 2.0f, (float)HEIGHT / 2.0f, 0.5, 1);
     //CLIP_MATRIX = glm::transpose(CLIP_MATRIX);
 
     //kernel void projection(global float3* const vertices, const float3 campos)
@@ -370,10 +379,10 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
             rendered_triangle_count++;
 
             // (Naive clipping) Clamp to screen region
-            int minX = glm::clamp(local_aabb_buff[i].minX, 0, SCREEN_WIDTH-1);
-            int minY = glm::clamp(local_aabb_buff[i].minY, 0, SCREEN_HEIGHT-1);
-            int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, SCREEN_WIDTH-1);
-            int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, SCREEN_HEIGHT-1);
+            int minX = glm::clamp(local_aabb_buff[i].minX, 0, WIDTH -1);
+            int minY = glm::clamp(local_aabb_buff[i].minY, 0, HEIGHT-1);
+            int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, WIDTH -1);
+            int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, HEIGHT-1);
 
             for (int x = minX; x <= maxX; x++) {
                 for (int y = minY; y <= maxY; y++) {
@@ -386,26 +395,22 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
                         float v = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
                         float w = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
                         float u = 1.f - v - w;
-                        
-                     /*  float v = 0.5f;
-                        float w = 0.5f;
-                        float u = 0.5f;*/
 
                         if ((u <= 1 && v <= 1 && w <= 1 && u >= 0 && v >= 0 && w >= 0)) {
                             float depth = (u*local_aabb_buff[i].d0 + v*local_aabb_buff[i].d1 + w*local_aabb_buff[i].d2);
                             //std::cout << "DEPTH: " << depth << std::endl;
-                            if ( (frame_buffer[x + y * SCREEN_WIDTH].depth == 0 || depth < frame_buffer[x + y * SCREEN_WIDTH].depth) && depth > znear && depth < zfar ) {
+                            if ( (frame_buffer[x + y * WIDTH].depth == 0 || depth < frame_buffer[x + y * WIDTH].depth) && depth > znear && depth < zfar ) {
                                 
                                 // Store triangle
-                                frame_buffer[x + y*SCREEN_WIDTH].triangle_id = i;
+                                frame_buffer[x + y*WIDTH].triangle_id = i;
 
                                 // Store interpolators
-                                frame_buffer[x + y*SCREEN_WIDTH].va = u;
-                                frame_buffer[x + y*SCREEN_WIDTH].vb = v;
-                                frame_buffer[x + y*SCREEN_WIDTH].vc = w;
+                                frame_buffer[x + y*WIDTH].va = u;
+                                frame_buffer[x + y*WIDTH].vb = v;
+                                frame_buffer[x + y*WIDTH].vc = w;
 
                                 // Write interpolated depth
-                                frame_buffer[x + y*SCREEN_WIDTH].depth = depth;
+                                frame_buffer[x + y*WIDTH].depth = depth;
                             }
                         }
                    // }
@@ -470,15 +475,15 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos, glm::vec3 camdir
     kernels["shaedars"]->setArg(0, *frame_buff);
     kernels["shaedars"]->setArg(1, *material_buffer);
     kernels["shaedars"]->setArg(2, *triangle_buf_alldata);
-    const cl::NDRange screen = cl::NDRange(SCREEN_WIDTH * SCREEN_HEIGHT);
+    const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     
-    queue->enqueueWriteBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
+    queue->enqueueWriteBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer);
 
     err = queue->enqueueNDRangeKernel(*kernels["shaedars"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
 
-    queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
+    queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer);
     queue->finish();
     clock_t end3 = clock();
     elapsed_secs = 1000 * double(end3 - begin3) / CLOCKS_PER_SEC;
@@ -563,10 +568,59 @@ void RENDER::release() {
     delete[] materials;
     delete material_buffer;
     delete frame_buff;
+    delete ssao_buff;
+    delete ssao_sample_kernel;
+
     delete triangle_buff;
     delete screen_space_buff;
     delete device;
     delete context;
     delete queue;
     delete[] local_aabb_buff;
+}
+
+void RENDER::calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir) {
+
+    // Camera Properties
+    float znear = 0.5f;
+    float zfar = 250.0f;
+    float FOV = 70.0f;
+    float aspect = (float)WIDTH / (float)HEIGHT;
+
+    // Construct matrices
+    glm::mat4 VIEW_MATRIX = glm::lookAt(campos, campos + camdir, glm::vec3(0, 1, 0));
+    glm::mat4 PROJECTION_MATRIX = glm::perspective(FOV*glm::pi<float>() / 180.0f, -((float)WIDTH / (float)HEIGHT), znear, zfar);
+    glm::mat4 MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
+
+    // Set kernel args
+    kernels["ssao"]->setArg(0, *frame_buff);
+    kernels["ssao"]->setArg(1, *ssao_buff);
+    kernels["ssao"]->setArg(2, *ssao_sample_kernel);
+    kernels["ssao"]->setArg(3, sizeof(int), &sample_count);
+    kernels["ssao"]->setArg(4, sizeof(cl_float) * 16, glm::value_ptr(MVP_MATRIX));
+
+
+    const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
+
+    // Temp: copy back SSAO buffer (This wont be needed as we can just leave it on the GPU until the combine step
+    cl_int err = queue->enqueueNDRangeKernel(*kernels["ssao"], NULL, screen);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+
+    queue->enqueueReadBuffer(*ssao_buff, CL_TRUE, 0, sizeof(Pixel) * WIDTH * HEIGHT, out_ssao_buffer);
+    queue->finish();
+}
+
+void RENDER::buildSSAOSampleKernel(int sample_num) {
+    glm::vec3* sample_kernel = new glm::vec3[sample_num];
+
+    for (int i = 0; i < sample_num; i++) {
+        sample_kernel[i] = glm::linearRand(glm::vec3(-1.0f, -1.0f, -1.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+    }
+    ssao_sample_kernel_vals = sample_kernel;
+
+    // Upload to GPU
+    sample_count = sample_num;
+
+    ssao_sample_kernel = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(glm::vec3) * sample_count);
+    queue->enqueueWriteBuffer(*ssao_sample_kernel, CL_TRUE, 0, sizeof(glm::vec3) * sample_count, ssao_sample_kernel_vals);
 }

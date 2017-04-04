@@ -3,6 +3,7 @@
 //Honestly got no clue why this is required, compiler whines too much, it should be able to determine this from the .h declarations
 cl::Buffer* RENDER::frame_buff;
 cl::Buffer* RENDER::triangle_buff;
+cl::Buffer* RENDER::triangle_buf_alldata;
 cl::Buffer* RENDER::screen_space_buff;
 cl::Buffer* RENDER::material_buffer;
 cl::Buffer* RENDER::aabb_buffer;
@@ -122,6 +123,8 @@ void RENDER::allocateOCLBuffers() {
     //TODO: move these to a map for better organisation
     frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(triplet) * triangle_refs.size());
+    triangle_buf_alldata = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Triangle) * triangle_refs.size());
+
     screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(triplet) * triangle_refs.size());
     material_buffer = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Material) * triangle_refs.size());
     aabb_buffer = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(AABB) * triangle_refs.size());
@@ -154,6 +157,13 @@ void RENDER::writeTriangles() {
         printf("ERROR %d %d\n", __LINE__, err);
         while (1);
     }
+
+
+    Triangle* triangles_FULL = new Triangle[triangle_refs.size()];
+    for (int i = 0; i < triangle_refs.size(); i++) {
+        triangles_FULL[i] = *triangle_refs[i];
+    }
+    err = queue->enqueueWriteBuffer(*triangle_buf_alldata, CL_TRUE, 0, sizeof(Triangle) * triangle_refs.size(), triangles_FULL);
 
     err = queue->enqueueWriteBuffer(*material_buffer, CL_TRUE, 0, sizeof(Material) * triangle_refs.size(), materials);
     if (err != 0) {
@@ -199,15 +209,18 @@ void RENDER::addTriangle(Triangle& triangle) {
     triangle_refs.emplace_back(&triangle);
 }
 void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
+
+   
+
     float rendered_triangle_count = 0;
 
     //Project Triangles to screen-space
     float campos2[] = { campos.x, campos.y, campos.z };
 
     // Camera Properties
-    float znear = 0.25f;
-    float zfar = 10.0f;
-    float FOV = 90.0f;
+    float znear = 0.5f;
+    float zfar = 50.0f;
+    float FOV = 70.0f;
     float aspect = (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT;
 
     // Construct matrices
@@ -231,6 +244,7 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
     //This section only runs if the "triangle" buffer has been written to after this section has last been run
     cl_int err = 0;
 
+    clock_t begin = clock();
     /// PROJECTION STAGE (GPU) ---------------------------------------------------------------------------------------------------//
     const cl::NDRange offset = cl::NDRange(0);
     const cl::NDRange global = cl::NDRange(number_of_triangles);
@@ -240,64 +254,37 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
 
     // Dont need to copy this if running rasterization step
     queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
+
+    clock_t end = clock();
+    double elapsed_secs = 1000*double(end - begin) / CLOCKS_PER_SEC;
+    std::cout << "Projection stage: " << elapsed_secs << "ms" << std::endl;
     ///---------------------------------------------------------------------------------------------------------------------//
 
+    /// AABB STAGE (GPU) ---------------------------------------------------------------------------------------------------//
+ /*   kernels["rasterizer"]->setArg(0, *aabb_buffer);
+    kernels["rasterizer"]->setArg(1, *screen_space_buff);
 
-    /// PROJECTION STAGE (GPU) ---------------------------------------------------------------------------------------------------//
-    //kernels["rasterizer"]->setArg(0, *aabb_buffer);
-    //kernels["rasterizer"]->setArg(1, *screen_space_buff);
-
-    //err = queue->enqueueNDRangeKernel(*kernels["rasterizer"], NULL, global);
-    //if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    err = queue->enqueueNDRangeKernel(*kernels["rasterizer"], NULL, global);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
     // Read AABB data from the rasterization step
-    //queue->enqueueReadBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);
-    ///---------------------------------------------------------------------------------------------------------------------//
-
-    /// AABB.cl (GPU) ---------------------------------------------------------------------------------------------------//
-    //kernels["aabb"]->setArg(0, *frame_buff);
-    //kernels["aabb"]->setArg(1, *aabb_buffer);
-
-    //unsigned int sum = 0;
-    /*for (int i = 0; i < triangle_refs.size(); i++) {
-        local_aabb_buff[i].offset = sum;
-        sum += (local_aabb_buff[i].maxX - local_aabb_buff[i].minX) * (local_aabb_buff[i].maxY - local_aabb_buff[i].minY);
-    }*/
-
-    //std::cout << "SUM: " << sum << std::endl;
-    //queue->enqueueWriteBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);
-
-    // kernels["aabb"]->setArg(2, sizeof sum, &sum);
-
-    //const cl::NDRange task_count = cl::NDRange(sum);
-
-    //err = queue->enqueueNDRangeKernel(*kernels["aabb"], NULL, task_count);
-    //if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
-    //queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
+    queue->enqueueReadBuffer(*aabb_buffer, CL_TRUE, 0, sizeof(AABB) * triangle_refs.size(), local_aabb_buff);*/
     ///---------------------------------------------------------------------------------------------------------------------//
     
 
     // AABB step CPU
+    clock_t begin2 = clock();
 #pragma omp parallel for
     for (int i = 0; i < triangle_refs.size(); i++) {
 
-        // Backface culling
-        /*if (glm::dot(triangle_refs[local_aabb_buff[i].triangle_id]->normal, glm::vec3(0, 0, 1)) < 0.0f) {
-            continue;
-        }*/
-
-        /// Projection.cl port (CPU)---------------------------------------- ///
         triplet s = triangles[i];
-        triplet& t = triangles[i];
+        /// Projection.cl port (CPU)---------------------------------------- ///
+        /*triplet& t = triangles[i];
 
         // World pos
-        /*glm::vec4 world_pos_0(triangle_refs[i]->v0.x, triangle_refs[i]->v0.y, triangle_refs[i]->v0.z, 1);
+        glm::vec4 world_pos_0(triangle_refs[i]->v0.x, triangle_refs[i]->v0.y, triangle_refs[i]->v0.z, 1);
         glm::vec4 world_pos_1(triangle_refs[i]->v1.x, triangle_refs[i]->v1.y, triangle_refs[i]->v1.z, 1);
         glm::vec4 world_pos_2(triangle_refs[i]->v2.x, triangle_refs[i]->v2.y, triangle_refs[i]->v2.z, 1);
-
-        if (i == 0) {
-            std::cout << "W_CPU(" << world_pos_0.x << "," << world_pos_0.y << "," << world_pos_0.z << ")" << std::endl;
-        }
 
         // Transform to view position
         glm::vec4 view_pos0, view_pos1, view_pos2;
@@ -305,76 +292,38 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         view_pos1 = VIEW_MATRIX*world_pos_1;
         view_pos2 = VIEW_MATRIX*world_pos_2;
 
-        if (i == 0) {
-            std::cout << "V_CPU(" << view_pos0.x << "," << view_pos0.y << "," << view_pos0.z << ")" << std::endl;
-        }
-
         // Projection
         glm::vec4 proj_pos0, proj_pos1, proj_pos2;
         proj_pos0 = PROJECTION_MATRIX*view_pos0;
         proj_pos1 = PROJECTION_MATRIX*view_pos1;
         proj_pos2 = PROJECTION_MATRIX*view_pos2;
 
-        if (i == 0) {
-            std::cout << "P_CPU(" << proj_pos0.x << "," << proj_pos0.y << "," << proj_pos0.z << ")" << std::endl;
-        }
-
         // PERSPECTIVE DIVIDE
         proj_pos0 /= proj_pos0.w;
         proj_pos1 /= proj_pos1.w;
         proj_pos2 /= proj_pos2.w;
 
-        if (i == 0) {
-            std::cout << "PD_CPU(" << proj_pos0.x << "," << proj_pos0.y << "," << proj_pos0.z << ")" << std::endl;
-        }
-
         // Clipping
-
         proj_pos0 = CLIP_MATRIX*proj_pos0;
         proj_pos1 = CLIP_MATRIX*proj_pos1;
         proj_pos2 = CLIP_MATRIX*proj_pos2;
 
-        if (i == 0) {
-            std::cout << "C_CPU(" << proj_pos0.x << "," << proj_pos0.y << "," << proj_pos0.z << ")" << std::endl;
-        }
         // Collect result
         s.v0.f.x = proj_pos0.x; 
         s.v0.f.y = proj_pos0.y;
-        s.v0.f.z = -proj_pos0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
+        s.v0.f.z = -view_pos0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
 
         s.v1.f.x = proj_pos1.x;
         s.v1.f.y = proj_pos1.y;
-        s.v1.f.z = -proj_pos0.z;
+        s.v1.f.z = -view_pos1.z;
 
         s.v2.f.x = proj_pos2.x;
         s.v2.f.y = proj_pos2.y;
-        s.v2.f.z = -view_pos2.z;
-
-        std::cout << "DEPTH: " << s.v0.f.z << " " << s.v1.f.z << " " << s.v2.f.z << std::endl;*/
-
-        /*if (i == 0) {
-            std::cout << s.v0.f.x << " " << s.v0.f.y << " " << s.v0.f.z << std::endl;
-            std::cout << s.v1.f.x << " " << s.v1.f.y << " " << s.v1.f.z << std::endl;
-            std::cout << s.v2.f.x << " " << s.v2.f.y << " " << s.v2.f.z << std::endl;
-        }*/
-
-
-        /*s.v0.i.x = (unsigned int)(((t.v0.f.x - campos.x) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
-        s.v0.i.y = (unsigned int)(((t.v0.f.y - campos.y) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-        s.v0.i.z = glm::distance(glm::vec3(t.v0.f.x, t.v0.f.y, t.v0.f.z), campos)*glm::sign(t.v0.f.z - campos.z);
-
-        s.v1.i.x = (unsigned int)(((t.v1.f.x - campos.x) / (t.v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
-        s.v1.i.y = (unsigned int)(((t.v1.f.y - campos.y) / (t.v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-        s.v1.i.z = glm::distance(glm::vec3(t.v1.f.x, t.v1.f.y, t.v1.f.z), campos)*glm::sign(t.v1.f.z - campos.z);
-
-        s.v2.i.x = (unsigned int)(((t.v2.f.x - campos.x) / (t.v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
-        s.v2.i.y = (unsigned int)(((t.v2.f.y - campos.y) / (t.v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-        s.v2.i.z = glm::distance(glm::vec3(t.v2.f.x, t.v2.f.y, t.v2.f.z), campos)*glm::sign(t.v2.f.z - campos.z);*/
+        s.v2.f.z = -view_pos2.z;*/
         /// ---------------------------------------------------------- ///
 
         /// Rasterizer.cl port CPU)---------------------------------------- ///
         //triplet& s = triangles[i];
-
         glm::ivec2 a = glm::ivec2(s.v0.i.x, s.v0.i.y);
         glm::ivec2 b = glm::ivec2(s.v1.i.x, s.v1.i.y);
         glm::ivec2 c = glm::ivec2(s.v2.i.x, s.v2.i.y);
@@ -394,20 +343,26 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         local_aabb_buff[i].minY = glm::min(glm::min(a.y, b.y), c.y);
         local_aabb_buff[i].maxX = glm::max(glm::max(a.x, b.x), c.x);
         local_aabb_buff[i].maxY = glm::max(glm::max(a.y, b.y), c.y);
-
+       /* if (i == 0) {
+            printf("CPU(%d %d %d %d) \n", local_aabb_buff[i].minX, local_aabb_buff[i].minY, local_aabb_buff[i].maxX, local_aabb_buff[i].maxY);
+        }
+        */
         /// ---------------------------------------------------------- ///
         bool skip = false;
 
         // Naive depth clipping
-        if (s.v0.f.z <= 0 || s.v1.f.z <= 0 || s.v2.f.z <= 0) {
+        if (local_aabb_buff[i].d0 <= 0.0 || local_aabb_buff[i].d1 <= 0.0 || local_aabb_buff[i].d2 <= 0.0) {
+            skip = true;
+        }
+        if (s.v0.f.z <= znear || s.v1.f.z <= znear || s.v2.f.z <= znear) {
             skip = true;
         }
         //if (i > 0) { skip = true; }
         
         // Backface culling
-        /*if (glm::dot(triangle_refs[local_aabb_buff[i].triangle_id]->normal, glm::vec3(0,0,1)) < 0.0f) {
+        if (glm::dot(triangle_refs[local_aabb_buff[i].triangle_id]->normal, glm::vec3(0,0,1)) < 0.0f) {
             skip = true;
-        }*/
+        }
 
         /// AABB step CPU ---------------------------------------- ///
         if (!skip) {
@@ -418,7 +373,6 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
             int minY = glm::clamp(local_aabb_buff[i].minY, 0, SCREEN_HEIGHT);
             int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, SCREEN_WIDTH);
             int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, SCREEN_HEIGHT);
-
 
             for (int x = minX; x <= maxX; x++) {
                 for (int y = minY; y <= maxY; y++) {
@@ -437,21 +391,15 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
                             //std::cout << "DEPTH: " << depth << std::endl;
                             if ( (frame_buffer[x + y * SCREEN_WIDTH].depth == 0 || depth < frame_buffer[x + y * SCREEN_WIDTH].depth) && depth > znear && depth < zfar ) {
                                 
-                                
-                                // Get TX coord
-                                //float tx = triangle_refs[i]->uv0.x*u + triangle_refs[i]->uv1.x*v + triangle_refs[i]->uv2.x*w;
-                                //float ty = triangle_refs[i]->uv0.y*u + triangle_refs[i]->uv1.y*v + triangle_refs[i]->uv2.y*w;
+                                // Store triangle
+                                frame_buffer[x + y*SCREEN_WIDTH].triangle_id = i;
 
-                                // Get Normal
-                                float nx = -(triangle_refs[i]->n0.x*u + triangle_refs[i]->n1.x*v + triangle_refs[i]->n2.x*w);
-                                float ny = -(triangle_refs[i]->n0.y*u + triangle_refs[i]->n1.y*v + triangle_refs[i]->n2.y*w);
-                                float nz = -(triangle_refs[i]->n0.z*u + triangle_refs[i]->n1.z*v + triangle_refs[i]->n2.z*w);
+                                // Store interpolators
+                                frame_buffer[x + y*SCREEN_WIDTH].va = u;
+                                frame_buffer[x + y*SCREEN_WIDTH].vb = v;
+                                frame_buffer[x + y*SCREEN_WIDTH].vc = w;
 
-
-                                frame_buffer[x + y*SCREEN_WIDTH].r = 255 * (nx*0.5 + 0.5);//triangle_refs[i]->color.r*255;
-                                frame_buffer[x + y*SCREEN_WIDTH].g = 255 * (ny*0.5 + 0.5);
-                                frame_buffer[x + y*SCREEN_WIDTH].b = 255 * (nz*0.5 + 0.5);
-
+                                // Write interpolated depth
                                 frame_buffer[x + y*SCREEN_WIDTH].depth = depth;
                             }
                         }
@@ -462,14 +410,61 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
         }
         /// ---------------------------------------------------------- ///
     }
-    std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
-
-
+    clock_t end2 = clock();
+    elapsed_secs = 1000 * double(end2 - begin2) / CLOCKS_PER_SEC;
+    std::cout << "AABB+raster stage: " << elapsed_secs << "ms" << std::endl;
     
+
+
+    /// Fragment Step (CPU)  ---------------------------------------- ///
+    /// - Ideally this should be done on the GPU, but that requires the triangle_refs[] array
+    /// - This is currently done here to ensure it is only run atmost once per pixel. (vs the above which could run many times per pixel)
+/*#pragma omp parallel for
+    for (int x = 0; x < SCREEN_WIDTH; x++) {
+        for (int y = 0; y < SCREEN_HEIGHT; y++) {
+
+            if (frame_buffer[x + y*SCREEN_WIDTH].depth > 0) {
+
+                // Get info
+                int i = frame_buffer[x + y*SCREEN_WIDTH].triangle_id;
+                float u = frame_buffer[x + y*SCREEN_WIDTH].va;
+                float v = frame_buffer[x + y*SCREEN_WIDTH].vb;
+                float w = frame_buffer[x + y*SCREEN_WIDTH].vc;
+
+                // Get TX coord
+                float tx = triangle_refs[i]->uv0.x*u + triangle_refs[i]->uv1.x*v + triangle_refs[i]->uv2.x*w;
+                float ty = triangle_refs[i]->uv0.y*u + triangle_refs[i]->uv1.y*v + triangle_refs[i]->uv2.y*w;
+                frame_buffer[x + y*SCREEN_WIDTH].uvx = tx;
+                frame_buffer[x + y*SCREEN_WIDTH].uvx = ty;
+
+                // Get interpolated Normal
+                float nx = -(triangle_refs[i]->n0.x*u + triangle_refs[i]->n1.x*v + triangle_refs[i]->n2.x*w);
+                float ny = -(triangle_refs[i]->n0.y*u + triangle_refs[i]->n1.y*v + triangle_refs[i]->n2.y*w);
+                float nz = -(triangle_refs[i]->n0.z*u + triangle_refs[i]->n1.z*v + triangle_refs[i]->n2.z*w);
+                frame_buffer[x + y*SCREEN_WIDTH].nx = nx;
+                frame_buffer[x + y*SCREEN_WIDTH].ny = ny;
+                frame_buffer[x + y*SCREEN_WIDTH].nz = nz;
+
+                // Get interpolated position
+                glm::vec3 pos = u*triangle_refs[i]->v0 + v*triangle_refs[i]->v1 + w*triangle_refs[i]->v2;
+                frame_buffer[x + y*SCREEN_WIDTH].x = pos.x;
+                frame_buffer[x + y*SCREEN_WIDTH].y = pos.y;
+                frame_buffer[x + y*SCREEN_WIDTH].z = pos.z;
+
+
+                frame_buffer[x + y*SCREEN_WIDTH].r = 255 * (frame_buffer[x + y*SCREEN_WIDTH].nx*0.5 + 0.5);
+                frame_buffer[x + y*SCREEN_WIDTH].g = 255 * (frame_buffer[x + y*SCREEN_WIDTH].ny*0.5 + 0.5);
+                frame_buffer[x + y*SCREEN_WIDTH].b = 255 * (frame_buffer[x + y*SCREEN_WIDTH].nz*0.5 + 0.5);
+            }
+        }
+    }*/
+    /// ---------------------------------------------------------- ///
    
     /// FRAGMENT STEP ---------------------------------------- ///
+    clock_t begin3 = clock();
     kernels["shaedars"]->setArg(0, *frame_buff);
     kernels["shaedars"]->setArg(1, *material_buffer);
+    kernels["shaedars"]->setArg(2, *triangle_buf_alldata);
     const cl::NDRange screen = cl::NDRange(SCREEN_WIDTH * SCREEN_HEIGHT);
     
     queue->enqueueWriteBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
@@ -480,8 +475,14 @@ void RENDER::renderFrame(Pixel* frame_buffer, glm::vec3 campos) {
 
     queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * SCREEN_HEIGHT * SCREEN_WIDTH, frame_buffer);
     queue->finish();
+    clock_t end3 = clock();
+    elapsed_secs = 1000 * double(end3 - begin3) / CLOCKS_PER_SEC;
+    std::cout << "Fragment: " << elapsed_secs << "ms" << std::endl;
+    std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
     /// ---------------------------------------------------------- ///
 
+    std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
+    std::cout << "-------------------------------------------" << std::endl;
 
 
     //TODO: generate fragments, maybe cpu is best for this, gpus normally do it in hardware

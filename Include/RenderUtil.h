@@ -15,6 +15,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <fstream>
+#include <ctime>
 
 union ufvec3 {
     glm::vec3 f;
@@ -55,8 +56,15 @@ struct Pixel {
     //Core pixel data
     uint8_t r, g, b, a;
     uint32_t triangle_id;
+
+    // Interpolators
+    float va, vb, vc; // Barycentric coordinates
+
+    // Stored information (for effects)
     float depth;
-    //unsigned short x, y;
+    float x, y, z;
+    float nx, ny, nz;
+    float uvx, uvy;
 };
 
 struct Material {
@@ -78,6 +86,7 @@ class RENDER {
     static cl::Buffer* screen_space_buff;
     static cl::Buffer* material_buffer;
     static cl::Buffer* aabb_buffer;
+    static cl::Buffer* triangle_buf_alldata;
 
     static std::vector<Triangle*> triangle_refs;
     static triplet* triangles;

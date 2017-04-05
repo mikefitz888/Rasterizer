@@ -11,7 +11,7 @@ typedef struct  {
 
 typedef struct clTexture {
    // int width, height;
-    Colour colours[1048576]; // Hard-coded for 1024*1024
+    Colour colours[262144]; // Hard-coded for 512*512
 } clTexture;
 
 // Texture  (Row major)

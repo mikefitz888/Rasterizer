@@ -18,16 +18,16 @@ typedef struct __attribute__((packed)) {
     Colour* specular_tex;
 } Material;*/
 
-Colour texture2D(global Colour* tex, float uvx, float uvy) {
-    int width = 1024;
-    int height = 1024;
+inline Colour texture2D(global Colour* tex, float uvx, float uvy) {
+    const int width = 512;
+    const int height = 512;
 
     // Convert uv to int
     uvx *= width;
     uvy *= height;
 
-    int uvx_i = (int)uvx;
-    int uvy_i = (int)uvy;
+    int uvx_i = (int)round(uvx);
+    int uvy_i = (int)round(uvy);
 
     // TEXTURE MODE (always assume wrapping)
     uvx_i = uvx_i % width;
@@ -35,7 +35,7 @@ Colour texture2D(global Colour* tex, float uvx, float uvy) {
 
     // Sample texture
     // TODO: Incorperate texture filtering
-   // printf("texture sample: %d, %d \n", uvx_i, uvy_i);
+    //printf("texture sample: %d, %d \n", uvx_i, uvy_i);
     Colour result = tex[uvx_i + uvy_i*width];
 
     return result;

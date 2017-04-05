@@ -6,7 +6,7 @@
 */
 #define POWER 4.5f
 #define STRENGTH 25.5f
-//#define SAMPLE_RADIUS 1.0f
+#define MAX_SAMPLE_RADIUS 1.0f
 #define MAX_RANGE 4.5f
 
 
@@ -66,22 +66,25 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
     Fragment ssao_result = ssao_buffer[id];
 
     /// ------------------- SSAO PROCESS ---------------------------
-    if (frag.depth == 0) { ssao_buffer[id].r = 0; ssao_buffer[id].g = 0; ssao_buffer[id].b = 0; return; }
+    if (frag.depth <= 0) { ssao_buffer[id].r = 0; ssao_buffer[id].g = 0; ssao_buffer[id].b = 0; return; }
 
+    // Depth factor
+    //float depthfactor = clamp(30.0f / (frag.depth + 0.01f), 0.3f, MAX_SAMPLE_RADIUS);
 
+    // Sample result accumulator
     float sample_result = 0.0f;
 
     for (int i = 0; i < sample_count; i++) {
         float3 wpos = (float3)(frag.x, frag.y, frag.z);
 
         // Perform sample
-        wpos += sample_kernel[i]; // Re-scale
+        wpos += sample_kernel[i]/*depthfactor*/; // Re-scale
 
         // Project sample pos
         float4 projected_kernel_vector = mul((float4)(wpos.x, wpos.y, wpos.z, 1.0f), MVP_MATRIX);
 
         // Perspective divide
-        projected_kernel_vector /= projected_kernel_vector.w;
+        projected_kernel_vector /= max(projected_kernel_vector.w, 0.01f);
 
         // Re-scale from -1 to 1 to 0 to SW, 
         projected_kernel_vector.x *= 0.5f;
@@ -97,16 +100,13 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
         coord.y = coord.y % 480;
 
         int sample_id = coord.x + coord.y * 600;
-        if (id == 100) {
-            printf("Sample (%d) ID: %d\n", i, sample_id);
-        }
         Fragment sample_fragment = fragment_buffer[sample_id];
 
         // Compare depths
         float4 projected_sample = mul((float4)(sample_fragment.x, sample_fragment.y, sample_fragment.z, 1.0f), MVP_MATRIX);
 
         // Perspective divide
-        projected_sample /= projected_sample.w;
+        projected_sample /= max(projected_sample.w, 0.01f);
 
         // Re-scale from -1 to 1 to 0 to SW, 
         projected_sample.x *= 0.5f;

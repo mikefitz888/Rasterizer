@@ -20,9 +20,9 @@ public:
 
 	//Normals
 	glm::vec3 n0, n1, n2;
+    
 
 	//Optional Parameters
-
 	glm::vec3 normal;
 	glm::vec3 color;
     float transparency = 1.0;
@@ -65,6 +65,8 @@ public:
 		**	Points in triangle: 0 < u, 0 < v, u+v < 1
 		*/
 		normal = glm::normalize(glm::cross(e2, e1));
+        
+
 	}
 
 	/*

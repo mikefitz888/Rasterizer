@@ -4,9 +4,10 @@
     STRENGTH  - controls the overall darkness of the AO. A higher strength will result in more impactful AO, though it will also highlight artifacts more.
     MAX_RANGE - controls the range at which a surface can cast occlusion onto another. If this is too high, you will get an effect called haloing which results in objects casting AO onto things that are far away.
 */
-#define POWER 5.0f
-#define STRENGTH 4.8f
-#define MAX_RANGE 7.0f
+#define POWER 4.5f
+#define STRENGTH 25.5f
+//#define SAMPLE_RADIUS 1.0f
+#define MAX_RANGE 4.5f
 
 
 
@@ -31,6 +32,12 @@ typedef struct {
     float m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23, m30, m31, m32, m33;
 } mat4;
 
+
+typedef struct {
+    //float m00, m10, m20, m30, m01, m11, m21, m31, m02, m12, m22, m32, m03, m13, m23, m33;//
+    float m00, m01, m02, m10, m11, m12, m20, m21, m22;
+} mat3;
+
 inline float4 mul(float4 input, mat4 mat) {
     float4 vec;
     vec.x = input.x*mat.m00 + input.y*mat.m10 + input.z*mat.m20 + input.w*mat.m30;
@@ -39,6 +46,15 @@ inline float4 mul(float4 input, mat4 mat) {
     vec.w = input.x*mat.m03 + input.y*mat.m13 + input.z*mat.m23 + input.w*mat.m33;
     return vec;
 }
+
+/*inline float3 mul3(float3 input, mat3 mat) {
+    float3 vec;
+    vec.x = input.x*mat.m00 + input.y*mat.m10 + input.z*mat.m20;
+    vec.y = input.x*mat.m01 + input.y*mat.m11 + input.z*mat.m21;
+    vec.z = input.x*mat.m02 + input.y*mat.m12 + input.z*mat.m22;
+    return vec;
+}
+*/
 
 /*typedef struct __attribute__((packed, aligned(4))) {
     float x, y, z;
@@ -52,13 +68,14 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
     /// ------------------- SSAO PROCESS ---------------------------
     if (frag.depth == 0) { ssao_buffer[id].r = 0; ssao_buffer[id].g = 0; ssao_buffer[id].b = 0; return; }
 
+
     float sample_result = 0.0f;
 
     for (int i = 0; i < sample_count; i++) {
         float3 wpos = (float3)(frag.x, frag.y, frag.z);
 
         // Perform sample
-        wpos += sample_kernel[i]*1.0f; // Re-scale
+        wpos += sample_kernel[i]; // Re-scale
 
         // Project sample pos
         float4 projected_kernel_vector = mul((float4)(wpos.x, wpos.y, wpos.z, 1.0f), MVP_MATRIX);
@@ -99,11 +116,18 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
         projected_sample.x *= 600.0f;
         projected_sample.y *= 480.0f;
 
+        // Normal factor
+        //float3 nmldiff = (float3)(sample_fragment.nx, sample_fragment.ny, sample_fragment.nz)-(float3)(frag.nx, frag.ny, frag.nz);
+       /* float nmlfac = 1.0f-dot((float3)(sample_fragment.nx, sample_fragment.ny, sample_fragment.nz), (float3)(frag.nx, frag.ny, frag.nz));
+        float nmlcheck = 0.0f;
+        if (nmlfac >= -0.5f) {
+            nmlcheck = nmlfac;
+        }*/
+
         // If kernel vector depth is greated than the sampled result stored in the array, occlusion occurs. We then have to perform the range check to verify the occluding surface is nearby in world-space
-        if (projected_sample.z < projected_kernel_vector.z && length((float3)(sample_fragment.x-frag.x, sample_fragment.y-frag.y, sample_fragment.z-frag.z)) < MAX_RANGE) {
-            sample_result += length(sample_kernel[i]);
-        }
-        
+        if (projected_sample.z < projected_kernel_vector.z && length((float3)(sample_fragment.x - frag.x, sample_fragment.y - frag.y, sample_fragment.z - frag.z)) < MAX_RANGE) {
+            sample_result += length(sample_kernel[i])/*nmlcheck*/;
+        }    
 
     }
     // Normalize result

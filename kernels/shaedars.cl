@@ -72,24 +72,19 @@ kernel void shaedars(global Fragment* fragment_buffer, global Material* const ma
     frag.uvy = ty;
 
     // Get interpolated Normal
-    float nx = -(t.n0.x*u + t.n1.x*v + t.n2.x*w);
-    float ny = -(t.n0.y*u + t.n1.y*v + t.n2.y*w);
-    float nz = -(t.n0.z*u + t.n1.z*v + t.n2.z*w);
-    frag.nx = nx;
-    frag.ny = ny;
-    frag.nz = nz;
+    float3 nml;
+    nml.x = -(t.n0.x*u + t.n1.x*v + t.n2.x*w);
+    nml.y = -(t.n0.y*u + t.n1.y*v + t.n2.y*w);
+    nml.z = -(t.n0.z*u + t.n1.z*v + t.n2.z*w);
+    nml = normalize(nml);
+    frag.nx = nml.x;
+    frag.ny = nml.y;
+    frag.nz = nml.z;
 
     // Get interpolated position
     frag.x = u*t.v0.x + v*t.v1.x + w*t.v2.x;
     frag.y = u*t.v0.y + v*t.v1.y + w*t.v2.y;
     frag.z = u*t.v0.z + v*t.v1.z + w*t.v2.z;
-
-
-
-
-
-
-
 
 
 

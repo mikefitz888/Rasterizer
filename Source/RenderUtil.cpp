@@ -404,16 +404,28 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
 
 
                         if ((a <= 1 && b <= 1 && c <= 1 && a >= 0 && b >= 0 && c >= 0)) {
-                            float depth = (a*local_aabb_buff[i].d0 + b*local_aabb_buff[i].d1 + c*local_aabb_buff[i].d2);
+
+                            // Correct barycentric coords for perspective:
+                            float zf = a / s.v0.f.z + b / s.v1.f.z + c / s.v2.f.z;
+                            a /= (s.v0.f.z*zf);
+                            b /= (s.v1.f.z*zf);
+                            c /= (s.v2.f.z*zf);
+
+                            // Perspective-correct depth;
+                            
+                            float depth = (a*local_aabb_buff[i].d0 + b*local_aabb_buff[i].d1  + c*local_aabb_buff[i].d2 );
+
+
                             //std::cout << "DEPTH: " << depth << std::endl;
                             if ( (frame_buffer[x + y * WIDTH].depth == 0 || depth < frame_buffer[x + y * WIDTH].depth) && depth > znear && depth < zfar ) {
                                 
                                 // Store triangle
+
+
                                 frame_buffer[x + y*WIDTH].triangle_id = i;
 
-                                // Store (PERSPECTIVE CORRECT? Maybe?) interpolators
-                                /*float zf = a / s.v0.f.z + b / s.v1.f.z + c / s.v2.f.z;
-                                frame_buffer[x + y*WIDTH].va = a / (s.v0.f.z*zf);
+                                // Store (PERSPECTIVE CORRECT? Maybe?) barycentric interpolators
+                                /*frame_buffer[x + y*WIDTH].va = a / (s.v0.f.z*zf);
                                 frame_buffer[x + y*WIDTH].vb = b / (s.v1.f.z*zf);
                                 frame_buffer[x + y*WIDTH].vc = c / (s.v2.f.z*zf);*/
 
@@ -637,8 +649,20 @@ void RENDER::calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::v
 void RENDER::buildSSAOSampleKernel(int sample_num) {
     glm::vec3* sample_kernel = new glm::vec3[sample_num];
 
+    const int SAMPLE_RADIUS = 1.0f;
+
     for (int i = 0; i < sample_num; i++) {
         sample_kernel[i] = glm::linearRand(glm::vec3(-1.0f, -1.0f, -1.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+
+       /*
+        // This kernel generation function is better, but only works for normal-oriented kernels
+       sample_kernel[i] = glm::linearRand(glm::vec3(-1.0f, -1.0f, -1.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+        sample_kernel[i] = glm::normalize(sample_kernel[i]);*/
+        sample_kernel[i] *= glm::linearRand(0.2f, 1.0f);
+        
+
+        // Scale sample (A higher radius increases the effect, but reduces precision)
+        sample_kernel[i] *= SAMPLE_RADIUS;
     }
     ssao_sample_kernel_vals = sample_kernel;
 

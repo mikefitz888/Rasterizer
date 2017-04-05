@@ -4,7 +4,7 @@
     STRENGTH  - controls the overall darkness of the AO. A higher strength will result in more impactful AO, though it will also highlight artifacts more.
     MAX_RANGE - controls the range at which a surface can cast occlusion onto another. If this is too high, you will get an effect called haloing which results in objects casting AO onto things that are far away.
 */
-#define POWER 4.5f
+#define POWER 3.5f
 #define STRENGTH 25.5f
 #define MAX_SAMPLE_RADIUS 1.0f
 #define MAX_RANGE 4.5f

@@ -24,6 +24,10 @@ cl::CommandQueue* RENDER::queue;
 std::vector<cl::Program*> RENDER::programs;
 std::map<std::string, cl::Kernel*> RENDER::kernels;
 
+// Texutres
+Texture* default_tex;
+
+
 bool RENDER::scene_changed = false;
 
 void RENDER::getOCLDevice() {
@@ -65,7 +69,7 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::vector<std::string> kernel_names = { "rasterizer", "projection", "shaedars", "aabb", "ssao" };
+    std::vector<std::string> kernel_names = { "rasterizer", "projection", "fragment_main", "aabb", "ssao" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -137,6 +141,9 @@ void RENDER::allocateOCLBuffers() {
     // SSAO
     ssao_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     
+    // LOAD TEXTURES:
+    //std::string str = "Resource/T1.bmp";
+    default_tex = new Texture("Resources/T1.bmp", context, queue);
 }
 
 void RENDER::writeTriangles() {
@@ -447,6 +454,9 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
                                 float perspCorrV = (a*triangle_refs[i]->uv0.y / s.v0.f.z + b*triangle_refs[i]->uv1.y / s.v1.f.z + c*triangle_refs[i]->uv2.y / s.v2.f.z) / zf;
                                 frame_buffer[x + y*WIDTH].uvx = perspCorrU;
                                 frame_buffer[x + y*WIDTH].uvy = perspCorrV;*/
+
+                                // TEMP texture test:
+
                             }
                         }
                    // }
@@ -508,14 +518,15 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
    
     /// FRAGMENT STEP ---------------------------------------- ///
     clock_t begin3 = clock();
-    kernels["shaedars"]->setArg(0, *frame_buff);
-    kernels["shaedars"]->setArg(1, *material_buffer);
-    kernels["shaedars"]->setArg(2, *triangle_buf_alldata);
+    kernels["fragment_main"]->setArg(0, *frame_buff);
+    kernels["fragment_main"]->setArg(1, *triangle_buf_alldata);
+    kernels["fragment_main"]->setArg(2, *default_tex->getGPUPtr());
+
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     
     queue->enqueueWriteBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer);
 
-    err = queue->enqueueNDRangeKernel(*kernels["shaedars"], NULL, screen);
+    err = queue->enqueueNDRangeKernel(*kernels["fragment_main"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
 
 

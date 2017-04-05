@@ -17,6 +17,8 @@
 #include <iostream>
 #include <fstream>
 #include <ctime>
+#include <cstring>
+#include "textures.h"
 
 union ufvec4 {
     glm::vec4 f;

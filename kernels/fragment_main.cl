@@ -1,3 +1,5 @@
+#include "kernels/Textures/Textures.cl"
+
 typedef struct __attribute__((packed, aligned(4))) {
     uchar r, g, b, a;
     uint triangle_id;
@@ -12,10 +14,6 @@ typedef struct __attribute__((packed, aligned(4))) {
     float uvx, uvy;
 
 } Fragment;
-
-typedef struct __attribute__((packed)) { 
-    float r, g, b, a;
-} Material;
 
 typedef struct __attribute__((packed)) {
     float x, y, z;
@@ -44,7 +42,9 @@ typedef struct __attribute__((packed)) {
 
 
 
-kernel void shaedars(global Fragment* fragment_buffer, global Material* const material_buffer, global Triangle* const triangle_buffer_all){
+
+
+kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* const triangle_buffer_all, global Colour* default_tex){
     uint id = get_global_id(0);
     Fragment frag = fragment_buffer[id];
     uint td = frag.triangle_id;
@@ -90,9 +90,14 @@ kernel void shaedars(global Fragment* fragment_buffer, global Material* const ma
 
     /// ---------------------------------------------------------- ///
     // TEMP - visualise normals
-    frag.r = 255 * (frag.nx*0.5 + 0.5);
+    /*frag.r = 255 * (frag.nx*0.5 + 0.5);
     frag.g = 255 * (frag.ny*0.5 + 0.5);
-    frag.b = 255 * (frag.nz*0.5 + 0.5);
+    frag.b = 255 * (frag.nz*0.5 + 0.5);*/
+
+    Colour tex_col = texture2D(default_tex, frag.uvx, frag.uvy);
+    frag.r = tex_col.r;
+    frag.g = tex_col.g;
+    frag.b = tex_col.b;
     
 
     // Reset depth

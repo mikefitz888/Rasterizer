@@ -59,28 +59,32 @@ typedef struct __attribute__((packed)) {
     uint id;
 } triplet;
 
-kernel void projection(global triplet* const wst, global triplet* sst, const mat4 VIEW_MATRIX, const mat4 PROJECTION_MATRIX, const mat4 CLIP_MATRIX ) { //world-space triangle, screen-space triangles, camera-position
+kernel void projection(global triplet* wst, global triplet* sst, mat4 VIEW_MATRIX, mat4 PROJECTION_MATRIX, mat4 CLIP_MATRIX) { //world-space triangle, screen-space triangles, camera-position
     uint id = get_global_id(0);
     triplet t = wst[id];
     triplet s;
     //global triplet* t = &wst[id];
 
     // World pos
-    fvec4 world_pos_0 = set4(t.v0.f.x, t.v0.f.y, t.v0.f.z, 1);
-    fvec4 world_pos_1 = set4(t.v1.f.x, t.v1.f.y, t.v1.f.z, 1);
-    fvec4 world_pos_2 = set4(t.v2.f.x, t.v2.f.y, t.v2.f.z, 1);
+    fvec4 pos_0 = set4(t.v0.f.x, t.v0.f.y, t.v0.f.z, 1);
+    fvec4 pos_1 = set4(t.v1.f.x, t.v1.f.y, t.v1.f.z, 1);
+    fvec4 pos_2 = set4(t.v2.f.x, t.v2.f.y, t.v2.f.z, 1);
 
     // Transform to view position
-    fvec4 view_pos0, view_pos1, view_pos2;
-    view_pos0 = mul(world_pos_0, VIEW_MATRIX);
-    view_pos1 = mul(world_pos_1, VIEW_MATRIX);
-    view_pos2 = mul(world_pos_2, VIEW_MATRIX);
+    //fvec4 view_pos0, view_pos1, view_pos2;
+    pos_0 = mul(pos_0, VIEW_MATRIX);
+    pos_1 = mul(pos_1, VIEW_MATRIX);
+    pos_2 = mul(pos_2, VIEW_MATRIX);
 
     // Project
     fvec4 proj_pos0, proj_pos1, proj_pos2;
-    proj_pos0 = mul(view_pos0, PROJECTION_MATRIX);
-    proj_pos1 = mul(view_pos1, PROJECTION_MATRIX);
-    proj_pos2 = mul(view_pos2, PROJECTION_MATRIX);
+    proj_pos0 = mul(pos_0, PROJECTION_MATRIX);
+    proj_pos1 = mul(pos_1, PROJECTION_MATRIX);
+    proj_pos2 = mul(pos_2, PROJECTION_MATRIX);
+
+    /*proj_pos0.w = (proj_pos0.w == 0.0f) ? 1.0f : proj_pos0.w;
+    proj_pos1.w = (proj_pos1.w == 0.0f) ? 1.0f : proj_pos1.w;
+    proj_pos2.w = (proj_pos2.w == 0.0f) ? 1.0f : proj_pos2.w;*/
 
     // PERSPECTIVE DIVIDE
     proj_pos0.x /= proj_pos0.w; proj_pos0.y /= proj_pos0.w; proj_pos0.z /= proj_pos0.w; //proj_pos0.w = 1.0f;
@@ -107,17 +111,17 @@ kernel void projection(global triplet* const wst, global triplet* sst, const mat
     // Collect result
     s.v0.f.x = proj_pos0.x;
     s.v0.f.y = proj_pos0.y;
-    s.v0.f.z = -view_pos0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
+    s.v0.f.z = -pos_0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
     s.v0.f.w = proj_pos0.w;
 
     s.v1.f.x = proj_pos1.x;
     s.v1.f.y = proj_pos1.y;
-    s.v1.f.z = -view_pos1.z;
+    s.v1.f.z = -pos_1.z;
     s.v0.f.w = proj_pos1.w;
 
     s.v2.f.x = proj_pos2.x;
     s.v2.f.y = proj_pos2.y;
-    s.v2.f.z = -view_pos2.z;
+    s.v2.f.z = -pos_2.z;
     s.v2.f.w = proj_pos2.w;
 
     sst[id] = s;

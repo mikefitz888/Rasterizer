@@ -36,7 +36,7 @@ typedef struct __attribute__((packed)) {
 
 
 //kernel void rasterizer(global Fragment* const frame_buf, global triplet* const sst) {
-kernel void rasterizer(global AABB* task_buffer, global triplet* const sst) { 
+kernel void rasterizer(global AABB* task_buffer, global triplet* sst) { 
     uint id = get_global_id(0);
     triplet s = sst[id];
     //printf("%d %d\n", s->v0.i.x, s->v0.i.y);

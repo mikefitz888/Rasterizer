@@ -5,8 +5,8 @@
     MAX_RANGE - controls the range at which a surface can cast occlusion onto another. If this is too high, you will get an effect called haloing which results in objects casting AO onto things that are far away.
 */
 #define POWER 3.5f
-#define STRENGTH 25.5f
-#define MAX_SAMPLE_RADIUS 1.0f
+#define STRENGTH 175.5f
+#define MAX_SAMPLE_RADIUS 1.25f
 #define MAX_RANGE 4.5f
 
 
@@ -60,7 +60,7 @@ inline float4 mul(float4 input, mat4 mat) {
     float x, y, z;
 } vec3;*/
 
-kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_buffer, global float3* sample_kernel, int sample_count, const mat4 MVP_MATRIX) {
+kernel void ssao(global Fragment* fragment_buffer, global Fragment* ssao_buffer, global float3* sample_kernel, int sample_count, mat4 MVP_MATRIX) {
     uint id = get_global_id(0);
     Fragment frag = fragment_buffer[id];
     Fragment ssao_result = ssao_buffer[id];
@@ -100,6 +100,7 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
         coord.y = coord.y % 480;
 
         int sample_id = coord.x + coord.y * 600;
+        sample_id = clamp(sample_id, 0, 600 * 480 - 1);
         Fragment sample_fragment = fragment_buffer[sample_id];
 
         // Compare depths
@@ -117,16 +118,12 @@ kernel void ssao(global Fragment* const fragment_buffer, global Fragment* ssao_b
         projected_sample.y *= 480.0f;
 
         // Normal factor
-        //float3 nmldiff = (float3)(sample_fragment.nx, sample_fragment.ny, sample_fragment.nz)-(float3)(frag.nx, frag.ny, frag.nz);
-       /* float nmlfac = 1.0f-dot((float3)(sample_fragment.nx, sample_fragment.ny, sample_fragment.nz), (float3)(frag.nx, frag.ny, frag.nz));
-        float nmlcheck = 0.0f;
-        if (nmlfac >= -0.5f) {
-            nmlcheck = nmlfac;
-        }*/
+        float3 nmldiff = (float3)(sample_fragment.nx, sample_fragment.ny, sample_fragment.nz)-(float3)(frag.nx, frag.ny, frag.nz);
+        float nmlcheck = clamp(fabs(nmldiff.x) + fabs(nmldiff.y) + fabs(nmldiff.z), 0.25f, 1.0f);
 
         // If kernel vector depth is greated than the sampled result stored in the array, occlusion occurs. We then have to perform the range check to verify the occluding surface is nearby in world-space
         if (projected_sample.z < projected_kernel_vector.z && length((float3)(sample_fragment.x - frag.x, sample_fragment.y - frag.y, sample_fragment.z - frag.z)) < MAX_RANGE) {
-            sample_result += length(sample_kernel[i])/*nmlcheck*/;
+            sample_result += length(sample_kernel[i])*nmlcheck;
         }    
 
     }

@@ -44,7 +44,7 @@ typedef struct __attribute__((packed)) {
 
 
 
-kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* const triangle_buffer_all, global Colour* default_tex){
+kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* triangle_buffer_all, global Colour* default_tex){
     uint id = get_global_id(0);
     Fragment frag = fragment_buffer[id];
     uint td = frag.triangle_id;
@@ -86,15 +86,46 @@ kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* con
     frag.y = u*t.v0.y + v*t.v1.y + w*t.v2.y;
     frag.z = u*t.v0.z + v*t.v1.z + w*t.v2.z;
 
+    // Barrier now that interpolation is complete
+    fragment_buffer[id] = frag;
+    barrier(CLK_GLOBAL_MEM_FENCE);
+    // ----------------------------------------------------------- //
 
 
     /// ---------------------------------------------------------- ///
     // TEMP - visualise normals
-    /*frag.r = 255 * (frag.nx*0.5 + 0.5);
+   /* frag.r = 255 * (frag.nx*0.5 + 0.5);
     frag.g = 255 * (frag.ny*0.5 + 0.5);
     frag.b = 255 * (frag.nz*0.5 + 0.5);*/
+    //int x = id % 600;
+    //int y = id / 600;
+    
 
-    Colour tex_col = texture2D(default_tex, frag.uvx, frag.uvy);
+    // TEMP ANISOTROPIC FILTERING
+    Fragment frag_left  = fragment_buffer[clamp((int)id-1, (int)0, (int)600*480)];
+    Fragment frag_up    = fragment_buffer[clamp((int)id-600, (int)0, (int)600 * 480)];
+
+    // Calculate gradient functions
+    float dudx = frag.uvx - frag_left.uvx;
+    float dvdx = frag.uvy - frag_left.uvy;
+    float dudy = frag.uvx - frag_up.uvx;
+    float dvdy = frag.uvy - frag_up.uvy;
+
+    // Tmp calculate aniso factor 
+    float px = sqrt(dudx*dudx + dvdx*dvdx);
+    float py = sqrt(dudy*dudy + dvdy*dvdy);
+
+    float pmax = max(px, py);
+    float pmin = min(px, py);
+
+    // Calculate LOD where 8 is the max anisotropy level.
+    // - N is the number of samples we should take
+    // - L is the LOD mip-map level we should use.
+    int N = min((int)ceil(pmax / pmin), 8);
+    int L = (int)log2(N/pmax);
+
+    int lod = clamp(9-L + ANISOTROPIC_LOD_BIAS, 0 , 9);
+    Colour tex_col = texture2D_LOD(default_tex, frag.uvx, frag.uvy, lod);
     frag.r = tex_col.r;
     frag.g = tex_col.g;
     frag.b = tex_col.b;

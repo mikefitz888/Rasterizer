@@ -51,7 +51,7 @@ bool running = true;
 
 float yaw = 0.0f, pitch = 0.0f;
 float yaws = 0.0f, pitchs = 0.0f;
-bool mouse_look_enabled = true;
+bool mouse_look_enabled = false;
 bool p_pressed = false;
 
 /* ----------------------------------------------------------------------------*/
@@ -77,7 +77,7 @@ int main( int argc, char* argv[] )
     //scene.addTriangles(model);p
     
     //RENDER::addTriangle(scene.getTrianglesRef()[0]);
-    model::Model m("wall.obj");
+    model::Model m("trainstation.obj");
     scene.addModel(&m);
 
     if( scene.getTrianglesRef().size() == 0){

@@ -11,7 +11,7 @@ typedef struct  {
 
 typedef struct clTexture {
    // int width, height;
-    Colour colours[262144]; // Hard-coded for 512*512
+    Colour colours[349526]; // Hard-coded for 512*512 plus mipmap levels
 } clTexture;
 
 // Texture  (Row major)
@@ -19,6 +19,8 @@ class Texture {
     clTexture* texture;
     bitmap_image* bmp;
     cl::Buffer* gpu_mem_ptr;
+
+    void generateMipMapLevels();
 
 public:
     Texture(const std::string& filename, const cl::Context *context, const cl::CommandQueue *queue);

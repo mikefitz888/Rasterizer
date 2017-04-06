@@ -1,0 +1,11 @@
+PERSPECTIVE CORRECT INTERPOLATION (partially used)
+http://www.cs.cornell.edu/courses/cs4620/2015fa/lectures/PerspectiveCorrectZU.pdf
+
+
+JOHN CHAPMAN, SSAO
+http://john-chapman-graphics.blogspot.co.uk/2013/01/ssao-tutorial.html
+
+
+TEXTURE FILTERING (ANISOTROPIC)
+http://computergraphics.stackexchange.com/questions/1432/how-is-anisotropic-filtering-typically-implemented-in-modern-gpus
+	https://www.khronos.org/registry/OpenGL/extensions/EXT/EXT_texture_filter_anisotropic.txt

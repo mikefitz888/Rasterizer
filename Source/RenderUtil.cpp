@@ -264,13 +264,13 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
     /// PROJECTION STAGE (GPU) ---------------------------------------------------------------------------------------------------//
     const cl::NDRange offset = cl::NDRange(0);
     const cl::NDRange global = cl::NDRange(number_of_triangles);
-    err = queue->enqueueNDRangeKernel(*kernels["projection"], NULL, global);
-
-    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    err = queue->enqueueNDRangeKernel(*kernels["projection"], offset, global);
+    queue->finish();
+    if (err) { printf("%d Error: (Projection kernel) %d\n", __LINE__, err); while (1); }
 
     // Dont need to copy this if running rasterization step
     queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
-
+    queue->finish();
     clock_t end = clock();
     double elapsed_secs = 1000*double(end - begin) / CLOCKS_PER_SEC;
     std::cout << "Projection stage: " << elapsed_secs << "ms" << std::endl;
@@ -525,10 +525,11 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     
     queue->enqueueWriteBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer);
+    queue->finish();
 
     err = queue->enqueueNDRangeKernel(*kernels["fragment_main"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
-
+    queue->finish();
 
     queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer);
     queue->finish();
@@ -652,6 +653,7 @@ void RENDER::calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::v
     // Temp: copy back SSAO buffer (This wont be needed as we can just leave it on the GPU until the combine step
     cl_int err = queue->enqueueNDRangeKernel(*kernels["ssao"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    queue->finish();
 
     queue->enqueueReadBuffer(*ssao_buff, CL_TRUE, 0, sizeof(Pixel) * WIDTH * HEIGHT, out_ssao_buffer);
     queue->finish();
@@ -660,7 +662,7 @@ void RENDER::calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::v
 void RENDER::buildSSAOSampleKernel(int sample_num) {
     glm::vec3* sample_kernel = new glm::vec3[sample_num];
 
-    const int SAMPLE_RADIUS = 1.0f;
+    const int SAMPLE_RADIUS = 1.25f;
 
     for (int i = 0; i < sample_num; i++) {
         sample_kernel[i] = glm::linearRand(glm::vec3(-1.0f, -1.0f, -1.0f), glm::vec3(1.0f, 1.0f, 1.0f));

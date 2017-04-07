@@ -85,10 +85,25 @@ struct AABB {
     size_t triangle_id, offset;
 };
 
+class FrameBuffer {
+    int width, height;
+    Pixel* cpu_buffer;
+    cl::Buffer* gpu_buffer;
+
+public:
+    FrameBuffer(int width, int height, const cl::Context *context);
+    ~FrameBuffer();
+    Pixel* getCPUBuffer();
+    cl::Buffer* getGPUBuffer();
+    int getWidth();
+    int getHeight();
+    void saveBMP(const std::string filename);
+    void clear();
+};
+
 class RENDER {
     //static Pixel frame_buff[SCREEN_WIDTH * SCREEN_HEIGHT];
-    static cl::Buffer* frame_buff;
-    static cl::Buffer* ssao_buff;
+    //static cl::Buffer* ssao_buff;
     static cl::Buffer* ssao_sample_kernel;
     static int sample_count;
     static glm::vec3* ssao_sample_kernel_vals;
@@ -130,14 +145,19 @@ class RENDER {
     static void writeTriangles();
 
 public:
-    static void initialize();
+    //static cl::Buffer* frame_buff;
 
+    static void initialize();
     static void addTriangle(Triangle& triangle);
 
-    static void renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir);
-    static void calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir);
+    static void renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 camdir);
+    static void calculateSSAO(FrameBuffer* in_frame_buffer, FrameBuffer* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir);
     static void buildSSAOSampleKernel(int sample_count);
+
+    static void calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir);
+
     static void release();
+    static inline cl::Context* getContext() { return RENDER::context; }
 };
 
 #endif

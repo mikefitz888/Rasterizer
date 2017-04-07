@@ -1,14 +1,12 @@
 #include "../Include/RenderUtil.h"
 
 //Honestly got no clue why this is required, compiler whines too much, it should be able to determine this from the .h declarations
-cl::Buffer* RENDER::frame_buff;
 cl::Buffer* RENDER::triangle_buff;
 cl::Buffer* RENDER::triangle_buf_alldata;
 cl::Buffer* RENDER::screen_space_buff;
 cl::Buffer* RENDER::material_buffer;
 cl::Buffer* RENDER::aabb_buffer;
 
-cl::Buffer* RENDER::ssao_buff;
 cl::Buffer* RENDER::ssao_sample_kernel;
 int RENDER::sample_count = 0;
 glm::vec3* RENDER::ssao_sample_kernel_vals;
@@ -69,7 +67,7 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::vector<std::string> kernel_names = { "rasterizer", "projection", "fragment_main", "aabb", "ssao" };
+    std::vector<std::string> kernel_names = { "rasterizer", "projection", "fragment_main", "aabb", "ssao", "shadows_directional" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -130,7 +128,7 @@ void RENDER::createOCLCommandQueue() {
 
 void RENDER::allocateOCLBuffers() {
     //TODO: move these to a map for better organisation
-    frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
+    //frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(triplet) * triangle_refs.size());
     triangle_buf_alldata = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Triangle) * triangle_refs.size());
 
@@ -139,7 +137,7 @@ void RENDER::allocateOCLBuffers() {
     aabb_buffer = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(AABB) * triangle_refs.size());
 
     // SSAO
-    ssao_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
+    //ssao_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     
     // LOAD TEXTURES:
     //std::string str = "Resource/T1.bmp";
@@ -224,9 +222,10 @@ void RENDER::initialize() {
 void RENDER::addTriangle(Triangle& triangle) {
     triangle_refs.emplace_back(&triangle);
 }
-void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir) {
+void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 camdir) {
 
-   
+    int WIDTH = frame_buffer->getWidth();
+    int HEIGHT = frame_buffer->getHeight();
 
     float rendered_triangle_count = 0;
 
@@ -249,8 +248,11 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
     kernels["projection"]->setArg(2, sizeof(cl_float)*16, glm::value_ptr(VIEW_MATRIX));
     kernels["projection"]->setArg(3, sizeof(cl_float)*16, glm::value_ptr(PROJECTION_MATRIX));
     kernels["projection"]->setArg(4, sizeof(cl_float)*16, glm::value_ptr(CLIP_MATRIX));
-
-
+    
+    float sw = (float)WIDTH;
+    float sh = (float)HEIGHT;
+    kernels["projection"]->setArg(5, sizeof(float), &sw);
+    kernels["projection"]->setArg(6, sizeof(float), &sh);
 
     unsigned int number_of_triangles = triangle_refs.size();
     std::cout << "NUMBER OF TRIANGLES: " << number_of_triangles << std::endl;
@@ -424,12 +426,12 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
 
 
                             //std::cout << "DEPTH: " << depth << std::endl;
-                            if ( (frame_buffer[x + y * WIDTH].depth == 0 || depth < frame_buffer[x + y * WIDTH].depth) && depth > znear && depth < zfar ) {
+                            if ( (frame_buffer->getCPUBuffer()[x + y * WIDTH].depth == 0 || depth < frame_buffer->getCPUBuffer()[x + y * WIDTH].depth) && depth > znear && depth < zfar ) {
                                 
                                 // Store triangle
 
 
-                                frame_buffer[x + y*WIDTH].triangle_id = i;
+                                frame_buffer->getCPUBuffer()[x + y*WIDTH].triangle_id = i;
 
                                 // Store (PERSPECTIVE CORRECT? Maybe?) barycentric interpolators
                                 /*frame_buffer[x + y*WIDTH].va = a / (s.v0.f.z*zf);
@@ -441,12 +443,12 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
                                 frame_buffer[x + y*WIDTH].vb = b*zz/s.v1.f.z;
                                 frame_buffer[x + y*WIDTH].vc = c*zz/s.v2.f.z;*/
 
-                                frame_buffer[x + y*WIDTH].va = a;
-                                frame_buffer[x + y*WIDTH].vb = b;
-                                frame_buffer[x + y*WIDTH].vc = c;
+                                frame_buffer->getCPUBuffer()[x + y*WIDTH].va = a;
+                                frame_buffer->getCPUBuffer()[x + y*WIDTH].vb = b;
+                                frame_buffer->getCPUBuffer()[x + y*WIDTH].vc = c;
 
                                 // Write interpolated depth
-                                frame_buffer[x + y*WIDTH].depth = depth;
+                                frame_buffer->getCPUBuffer()[x + y*WIDTH].depth = depth;
 
                                 // Perspective correct UV:
                                 
@@ -518,20 +520,24 @@ void RENDER::renderFrame(Pixel* frame_buffer, int WIDTH, int HEIGHT, glm::vec3 c
    
     /// FRAGMENT STEP ---------------------------------------- ///
     clock_t begin3 = clock();
-    kernels["fragment_main"]->setArg(0, *frame_buff);
+    kernels["fragment_main"]->setArg(0, *frame_buffer->getGPUBuffer());
     kernels["fragment_main"]->setArg(1, *triangle_buf_alldata);
     kernels["fragment_main"]->setArg(2, *default_tex->getGPUPtr());
+    int swi = WIDTH;
+    int shi = HEIGHT;
+    kernels["fragment_main"]->setArg(3, sizeof(int), &swi);
+    kernels["fragment_main"]->setArg(4, sizeof(int), &shi);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     
-    queue->enqueueWriteBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer);
+    queue->enqueueWriteBuffer(*frame_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer());
     queue->finish();
 
     err = queue->enqueueNDRangeKernel(*kernels["fragment_main"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     queue->finish();
 
-    queue->enqueueReadBuffer(*frame_buff, CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer);
+    queue->enqueueReadBuffer(*frame_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer());
     queue->finish();
     clock_t end3 = clock();
     elapsed_secs = 1000 * double(end3 - begin3) / CLOCKS_PER_SEC;
@@ -615,8 +621,8 @@ void RENDER::release() {
     delete[] triangles;
     delete[] materials;
     delete material_buffer;
-    delete frame_buff;
-    delete ssao_buff;
+    //delete frame_buff;
+    //delete ssao_buff;
     delete ssao_sample_kernel;
 
     delete triangle_buff;
@@ -627,7 +633,7 @@ void RENDER::release() {
     delete[] local_aabb_buff;
 }
 
-void RENDER::calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir) {
+void RENDER::calculateSSAO(FrameBuffer* in_frame_buffer, FrameBuffer* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir) {
 
     // Camera Properties
     float znear = 0.5f;
@@ -641,12 +647,16 @@ void RENDER::calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::v
     glm::mat4 MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
 
     // Set kernel args
-    kernels["ssao"]->setArg(0, *frame_buff);
-    kernels["ssao"]->setArg(1, *ssao_buff);
+    kernels["ssao"]->setArg(0, *in_frame_buffer->getGPUBuffer());
+    kernels["ssao"]->setArg(1, *out_ssao_buffer->getGPUBuffer());
     kernels["ssao"]->setArg(2, *ssao_sample_kernel);
     kernels["ssao"]->setArg(3, sizeof(int), &sample_count);
     kernels["ssao"]->setArg(4, sizeof(cl_float) * 16, glm::value_ptr(MVP_MATRIX));
 
+    int sw = WIDTH;
+    int sh = HEIGHT;
+    kernels["ssao"]->setArg(5, sizeof(int), &sw);
+    kernels["ssao"]->setArg(6, sizeof(int), &sh);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
 
@@ -655,7 +665,7 @@ void RENDER::calculateSSAO(Pixel* out_ssao_buffer, int WIDTH, int HEIGHT, glm::v
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     queue->finish();
 
-    queue->enqueueReadBuffer(*ssao_buff, CL_TRUE, 0, sizeof(Pixel) * WIDTH * HEIGHT, out_ssao_buffer);
+    queue->enqueueReadBuffer(*out_ssao_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * WIDTH * HEIGHT, out_ssao_buffer->getCPUBuffer());
     queue->finish();
 }
 
@@ -684,4 +694,94 @@ void RENDER::buildSSAOSampleKernel(int sample_num) {
 
     ssao_sample_kernel = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(glm::vec3) * sample_count);
     queue->enqueueWriteBuffer(*ssao_sample_kernel, CL_TRUE, 0, sizeof(glm::vec3) * sample_count, ssao_sample_kernel_vals);
+}
+
+// DIRECTIONAL SHADOWS
+void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir) {
+
+    int SHADOW_WIDTH  = in_light_buffer->getWidth();
+    int SHADOW_HEIGHT = in_light_buffer->getHeight();
+    int CAMERA_WIDTH  = in_frame_buffer->getWidth();
+    int CAMERA_HEIGHT = in_frame_buffer->getHeight();
+
+    // Camera Properties
+    float znear = 0.5f;
+    float zfar = 250.0f;
+    float FOV = 70.0f;
+    float aspect = (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT;
+
+    // Construct matrices
+    glm::mat4 VIEW_MATRIX = glm::lookAt(lightpos, lightpos + lightdir, glm::vec3(0, 1, 0));
+    glm::mat4 PROJECTION_MATRIX = glm::perspective(FOV*glm::pi<float>() / 180.0f, -((float)SHADOW_WIDTH / (float)SHADOW_HEIGHT), znear, zfar);
+    glm::mat4 LIGHT_MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
+
+    // Set kernel args
+    kernels["shadows_directional"]->setArg(0, *in_frame_buffer->getGPUBuffer());
+    kernels["shadows_directional"]->setArg(1, *in_light_buffer->getGPUBuffer());
+    kernels["shadows_directional"]->setArg(2, *out_shadow_buffer->getGPUBuffer());
+    kernels["shadows_directional"]->setArg(3, sizeof(cl_float) * 16, glm::value_ptr(LIGHT_MVP_MATRIX));
+
+    int sw = SHADOW_WIDTH;
+    int sh = SHADOW_HEIGHT;
+    kernels["shadows_directional"]->setArg(4, sizeof(int), &sw);
+    kernels["shadows_directional"]->setArg(5, sizeof(int), &sh);
+
+    // Enqueue kernel
+    const cl::NDRange screen = cl::NDRange(CAMERA_WIDTH * CAMERA_HEIGHT);
+    cl_int err = queue->enqueueNDRangeKernel(*kernels["shadows_directional"], NULL, screen);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    queue->finish();
+
+    queue->enqueueReadBuffer(*out_shadow_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * CAMERA_WIDTH * CAMERA_HEIGHT, out_shadow_buffer->getCPUBuffer());
+    queue->finish();
+}
+
+
+
+// Framebuffer
+FrameBuffer::FrameBuffer(int width, int height, const cl::Context *context) {
+    this->width = width;
+    this->height = height;
+
+    this->cpu_buffer = new Pixel[width*height];
+    this->gpu_buffer = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * width * height);
+}
+Pixel* FrameBuffer::getCPUBuffer() {
+    return this->cpu_buffer;
+}
+cl::Buffer* FrameBuffer::getGPUBuffer() {
+    return this->gpu_buffer;
+}
+
+FrameBuffer::~FrameBuffer() {
+    delete[] this->cpu_buffer;
+    delete this->gpu_buffer;
+}
+
+int FrameBuffer::getWidth() {
+    return this->width;
+}
+
+int FrameBuffer::getHeight() {
+    return this->height;
+}
+
+void FrameBuffer::saveBMP(const std::string filename) {
+    bitmap_image* bmp = new bitmap_image(this->width, this->height);
+    for (int i = 0; i < this->width; i++) {
+        for (int j = 0; j < this->height; j++) {
+            bmp->set_pixel(i, j, this->cpu_buffer[i + j*this->width].r, 
+                                 this->cpu_buffer[i + j*this->width].g, 
+                                 this->cpu_buffer[i + j*this->width].b);
+        }
+    }
+    bmp->save_image(filename);
+}
+
+void FrameBuffer::clear() {
+    for (int i = 0; i < this->width; i++) {
+        for (int j = 0; j < this->height; j++) {
+            this->cpu_buffer[i + j*this->width] = {};
+        }
+    }
 }

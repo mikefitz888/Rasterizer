@@ -5,45 +5,16 @@
     MAX_RANGE - controls the range at which a surface can cast occlusion onto another. If this is too high, you will get an effect called haloing which results in objects casting AO onto things that are far away.
 */
 #include "kernels/Textures/Textures.cl"
-#define POWER 3.5f
-#define STRENGTH 175.5f
+#include "kernels/Utility/Matrix.cl"
+
+#define POWER 3.8f
+#define STRENGTH 170.5f
 #define MAX_SAMPLE_RADIUS 1.25f
 #define MAX_RANGE 4.5f
 
-typedef struct {
-    //float m00, m10, m20, m30, m01, m11, m21, m31, m02, m12, m22, m32, m03, m13, m23, m33;//
-    float m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23, m30, m31, m32, m33;
-} mat4;
 
 
-typedef struct {
-    //float m00, m10, m20, m30, m01, m11, m21, m31, m02, m12, m22, m32, m03, m13, m23, m33;//
-    float m00, m01, m02, m10, m11, m12, m20, m21, m22;
-} mat3;
-
-inline float4 mul(float4 input, mat4 mat) {
-    float4 vec;
-    vec.x = input.x*mat.m00 + input.y*mat.m10 + input.z*mat.m20 + input.w*mat.m30;
-    vec.y = input.x*mat.m01 + input.y*mat.m11 + input.z*mat.m21 + input.w*mat.m31;
-    vec.z = input.x*mat.m02 + input.y*mat.m12 + input.z*mat.m22 + input.w*mat.m32;
-    vec.w = input.x*mat.m03 + input.y*mat.m13 + input.z*mat.m23 + input.w*mat.m33;
-    return vec;
-}
-
-/*inline float3 mul3(float3 input, mat3 mat) {
-    float3 vec;
-    vec.x = input.x*mat.m00 + input.y*mat.m10 + input.z*mat.m20;
-    vec.y = input.x*mat.m01 + input.y*mat.m11 + input.z*mat.m21;
-    vec.z = input.x*mat.m02 + input.y*mat.m12 + input.z*mat.m22;
-    return vec;
-}
-*/
-
-/*typedef struct __attribute__((packed, aligned(4))) {
-    float x, y, z;
-} vec3;*/
-
-kernel void ssao(global Fragment* fragment_buffer, global Fragment* ssao_buffer, global float3* sample_kernel, int sample_count, mat4 MVP_MATRIX) {
+kernel void ssao(global Fragment* fragment_buffer, global Fragment* ssao_buffer, global float3* sample_kernel, int sample_count, mat4 MVP_MATRIX, int screen_width, int screen_height) {
     uint id = get_global_id(0);
     Fragment frag = fragment_buffer[id];
     Fragment ssao_result = ssao_buffer[id];
@@ -74,16 +45,16 @@ kernel void ssao(global Fragment* fragment_buffer, global Fragment* ssao_buffer,
         projected_kernel_vector.y *= 0.5f;
         projected_kernel_vector.x += 0.5f;
         projected_kernel_vector.y += 0.5f;
-        projected_kernel_vector.x *= 600.0f;
-        projected_kernel_vector.y *= 480.0f;
+        projected_kernel_vector.x *= (float)screen_width;
+        projected_kernel_vector.y *= (float)screen_height;
 
         // get sample depth
         int2 coord = convert_int2((float2)(projected_kernel_vector.x, projected_kernel_vector.y));
-        coord.x = coord.x % 600;
-        coord.y = coord.y % 480;
+        coord.x = coord.x % screen_width;
+        coord.y = coord.y % screen_height;
 
-        int sample_id = coord.x + coord.y * 600;
-        sample_id = clamp(sample_id, 0, 600 * 480 - 1);
+        int sample_id = coord.x + coord.y * screen_width;
+        sample_id = clamp(sample_id, 0, screen_width * screen_height - 1);
         Fragment sample_fragment = fragment_buffer[sample_id];
 
         // Compare depths
@@ -97,8 +68,8 @@ kernel void ssao(global Fragment* fragment_buffer, global Fragment* ssao_buffer,
         projected_sample.y *= 0.5f;
         projected_sample.x += 0.5f;
         projected_sample.y += 0.5f;
-        projected_sample.x *= 600.0f;
-        projected_sample.y *= 480.0f;
+        projected_sample.x *= (float)screen_width;
+        projected_sample.y *= (float)screen_height;
 
         // Normal factor
         float3 nmldiff = (float3)(sample_fragment.nx, sample_fragment.ny, sample_fragment.nz)-(float3)(frag.nx, frag.ny, frag.nz);

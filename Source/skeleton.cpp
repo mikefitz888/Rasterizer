@@ -47,6 +47,9 @@ int t;
 glm::vec3 campos(0.0, 0.0, -3.0);
 glm::vec3 camposs = campos;
 glm::vec3 camdir(0.0f, 0.0f, 1.0f);
+
+glm::vec3 sunlight_pos(-26.256, -33.5917, 19.1776);
+glm::vec3 sunlight_dir(0.64513, 0.692729, -0.322388);
 bool running = true;
 
 float yaw = 0.0f, pitch = 0.0f;
@@ -64,7 +67,7 @@ void Interpolate(glm::ivec2 a, glm::ivec2 b, vector<glm::ivec2>& result);
 
 int main( int argc, char* argv[] )
 {
-
+    
 	screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT );
 	t = SDL_GetTicks();	// Set start value for timer.    
     
@@ -91,13 +94,26 @@ int main( int argc, char* argv[] )
 
     RENDER::initialize(); //Triangles must be loaded to RENDER before this is called; "void RENDER::addTriangle(Triangle& triangle)"
     
-    Pixel* frame_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
-    Pixel* ssao_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
-    
+    // Generate a few buffers to store results in
+    FrameBuffer* frame_buffer  = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
+    FrameBuffer* ssao_buffer   = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
+    FrameBuffer* shadow_buffer = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
+
     // Generate SSAO Kernel
     int sample_count = 128;
     RENDER::buildSSAOSampleKernel(sample_count);
 
+    // Generate a buffer to store lighting in
+    const int LIGHTMAP_WIDTH = 2048;
+    const int LIGHTMAP_HEIGHT = 2048;
+    FrameBuffer* lightmap_buffer = new FrameBuffer(LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, RENDER::getContext());
+
+    // Render shadowmap
+    lightmap_buffer->clear();
+    RENDER::renderFrame(lightmap_buffer, sunlight_pos, sunlight_dir);
+    lightmap_buffer->saveBMP("lightmap.bmp");
+    
+    bool pressed = false;
 	while( NoQuitMessageSDL() && running )
 	{
 		Update(); 
@@ -105,10 +121,36 @@ int main( int argc, char* argv[] )
         clock_t b = clock();
 
         // Render main frame
-        RENDER::renderFrame(frame_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
+        //RENDER::renderFrame(lightmap_buffer, camposs, camdir);
+        RENDER::renderFrame(frame_buffer, camposs, camdir);
+
+        // TEMP: Press Space to render light buffer
+        Uint8* keystate = SDL_GetKeyState(0);
+        if (keystate[SDLK_SPACE] && !pressed) {
+            
+            // Clear lightmap
+            lightmap_buffer->clear();
+
+            // Store position
+            sunlight_pos = camposs;
+            sunlight_dir = camdir;
+
+            // Render lighting
+            RENDER::renderFrame(lightmap_buffer, sunlight_pos, sunlight_dir);
+            lightmap_buffer->saveBMP("lightmap.bmp");
+            pressed = true;
+
+            std::cout << "lightpos: " << sunlight_pos.x << " " << sunlight_pos.y << " " << sunlight_pos.z << std::endl;
+            std::cout << "lightdir: " << sunlight_dir.x << " " << sunlight_dir.y << " " << sunlight_dir.z << std::endl;
+        } else {
+            pressed = false;
+        }
+
+        // Render Shadow buffer
+        RENDER::calculateShadows(frame_buffer, lightmap_buffer, shadow_buffer, sunlight_pos, sunlight_dir);
 
         // Render SSAO buffer
-        RENDER::calculateSSAO(ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
+        RENDER::calculateSSAO(frame_buffer, ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
 
         clock_t e = clock();
 
@@ -121,11 +163,15 @@ int main( int argc, char* argv[] )
 #pragma omp parallel for
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
-                Pixel& p = ssao_buffer[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
-                Pixel& p2 = frame_buffer[x + y * SCREEN_WIDTH];
+                Pixel& p = ssao_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
+                Pixel& p2 = frame_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];
+                Pixel& p3 = shadow_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];
                 
-                
-                
+                // TEMP: multiply by shadow factor
+                p2.r *= p3.r/255.0f;
+                p2.g *= p3.g/255.0f;
+                p2.b *= p3.b/255.0f;
+
                 Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
                 *a = SDL_MapRGB(screen->format, ((float)p.r/255.0f*(float)p2.r/255.0f)*255, ((float)p.g/255.0f*(float)p2.g/255.0f) * 255, ((float)p.b/255.0f*(float)p2.b/255.0f)* 255);
                 //*a = SDL_MapRGB(screen->format, p.r, p.g, p.b);
@@ -133,7 +179,7 @@ int main( int argc, char* argv[] )
                 //PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
 
                 // Clear
-                frame_buffer[x + y * SCREEN_WIDTH].depth = 0;
+                frame_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH].depth = 0;
             }
         }
 
@@ -148,7 +194,9 @@ int main( int argc, char* argv[] )
     
 
     RENDER::release();
-    delete[] frame_buffer;
+    delete frame_buffer;
+    delete ssao_buffer;
+    delete lightmap_buffer;
 
 	SDL_SaveBMP( screen, "screenshot.bmp" );
 	return 0;
@@ -182,6 +230,7 @@ void Update()
         // Move 
         campos.y += 0.080f;
     }*/
+    
 
     if (keystate[SDLK_ESCAPE]) {
         running = false;

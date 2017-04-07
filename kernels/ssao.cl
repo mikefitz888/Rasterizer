@@ -4,28 +4,11 @@
     STRENGTH  - controls the overall darkness of the AO. A higher strength will result in more impactful AO, though it will also highlight artifacts more.
     MAX_RANGE - controls the range at which a surface can cast occlusion onto another. If this is too high, you will get an effect called haloing which results in objects casting AO onto things that are far away.
 */
+#include "kernels/Textures/Textures.cl"
 #define POWER 3.5f
 #define STRENGTH 175.5f
 #define MAX_SAMPLE_RADIUS 1.25f
 #define MAX_RANGE 4.5f
-
-
-
-///////////////////
-typedef struct __attribute__((packed, aligned(4))) {
-    uchar r, g, b, a;
-    uint triangle_id;
-
-    // Interpolators
-    float va, vb, vc; // Barycentric coordinates
-
-                      // Stored information
-    float depth;
-    float x, y, z;
-    float nx, ny, nz;
-    float uvx, uvy;
-
-} Fragment;
 
 typedef struct {
     //float m00, m10, m20, m30, m01, m11, m21, m31, m02, m12, m22, m32, m03, m13, m23, m33;//

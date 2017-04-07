@@ -1,20 +1,5 @@
 #include "kernels/Textures/Textures.cl"
 
-typedef struct __attribute__((packed, aligned(4))) {
-    uchar r, g, b, a;
-    uint triangle_id;
-
-    // Interpolators
-    float va, vb, vc; // Barycentric coordinates
-
-    // Stored information
-    float depth;
-    float x, y, z;
-    float nx, ny, nz;
-    float uvx, uvy;
-
-} Fragment;
-
 typedef struct __attribute__((packed)) {
     float x, y, z;
 } vec3;
@@ -89,6 +74,21 @@ kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* tri
     // Barrier now that interpolation is complete
     fragment_buffer[id] = frag;
     barrier(CLK_GLOBAL_MEM_FENCE);
+
+    // Calculate gradient information
+    Fragment frag_left = fragment_buffer[clamp((int)id - 1, (int)0, (int)600 * 480)];
+    Fragment frag_up = fragment_buffer[clamp((int)id - 600, (int)0, (int)600 * 480)];
+    float dudx = frag.uvx - frag_left.uvx;
+    float dvdx = frag.uvy - frag_left.uvy;
+    float dudy = frag.uvx - frag_up.uvx;
+    float dvdy = frag.uvy - frag_up.uvy;
+
+    // Store gradient informationfrag.
+    frag.dudx = dudx;
+    frag.dvdx = dvdx;
+    frag.dudy = dudy;
+    frag.dvdy = dvdy;
+
     // ----------------------------------------------------------- //
 
 
@@ -101,31 +101,9 @@ kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* tri
     //int y = id / 600;
     
 
-    // TEMP ANISOTROPIC FILTERING
-    Fragment frag_left  = fragment_buffer[clamp((int)id-1, (int)0, (int)600*480)];
-    Fragment frag_up    = fragment_buffer[clamp((int)id-600, (int)0, (int)600 * 480)];
-
-    // Calculate gradient functions
-    float dudx = frag.uvx - frag_left.uvx;
-    float dvdx = frag.uvy - frag_left.uvy;
-    float dudy = frag.uvx - frag_up.uvx;
-    float dvdy = frag.uvy - frag_up.uvy;
-
+    // TEMP BILINEAR FILTERING
     // Tmp calculate aniso factor 
-    float px = sqrt(dudx*dudx + dvdx*dvdx);
-    float py = sqrt(dudy*dudy + dvdy*dvdy);
-
-    float pmax = max(px, py);
-    float pmin = min(px, py);
-
-    // Calculate LOD where 8 is the max anisotropy level.
-    // - N is the number of samples we should take
-    // - L is the LOD mip-map level we should use.
-    int N = min((int)ceil(pmax / pmin), 8);
-    int L = (int)log2(N/pmax);
-
-    int lod = clamp(9-L + ANISOTROPIC_LOD_BIAS, 0 , 9);
-    Colour tex_col = texture2D_LOD(default_tex, frag.uvx, frag.uvy, lod);
+    Colour tex_col = texture2D_bilinear(default_tex, frag.uvx, frag.uvy, frag);
     frag.r = tex_col.r;
     frag.g = tex_col.g;
     frag.b = tex_col.b;
@@ -134,6 +112,7 @@ kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* tri
     // Reset depth
     //frag.depth = 0.0f;
 
+    
     // Write out result:
     fragment_buffer[id] = frag;
 }

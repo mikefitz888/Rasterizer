@@ -68,6 +68,9 @@ struct Pixel {
     float x, y, z;
     float nx, ny, nz;
     float uvx, uvy;
+
+    // Gradient functions
+    float dudx, dvdx, dudy, dvdy;
 };
 
 struct Material {

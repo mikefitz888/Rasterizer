@@ -73,11 +73,13 @@ kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* tri
 
     // Barrier now that interpolation is complete
     fragment_buffer[id] = frag;
-    barrier(CLK_GLOBAL_MEM_FENCE);
+#ifdef DEVICE_GPU
+    barrier(CLK_GLOBAL_MEM_FENCE); // < This crashes on the CPU openCL for some reason
+#endif
 
     // Calculate gradient information
-    Fragment frag_left = fragment_buffer[clamp((int)id - 1, (int)0, (int)(screen_width * screen_height))];
-    Fragment frag_up = fragment_buffer[clamp((int)id - (int)screen_width, (int)0, (int)(screen_width*screen_height))];
+    Fragment frag_left = fragment_buffer[clamp((int)id - 1, (int)0, (int)(screen_width * screen_height -1))];
+    Fragment frag_up = fragment_buffer[clamp((int)id - (int)screen_width, (int)0, (int)(screen_width*screen_height-1))];
     float dudx = frag.uvx - frag_left.uvx;
     float dvdx = frag.uvy - frag_left.uvy;
     float dudy = frag.uvx - frag_up.uvx;

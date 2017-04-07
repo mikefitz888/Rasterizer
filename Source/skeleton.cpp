@@ -109,9 +109,9 @@ int main( int argc, char* argv[] )
     FrameBuffer* lightmap_buffer = new FrameBuffer(LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, RENDER::getContext());
 
     // Render shadowmap
-    lightmap_buffer->clear();
+   /* lightmap_buffer->clear();
     RENDER::renderFrame(lightmap_buffer, sunlight_pos, sunlight_dir);
-    lightmap_buffer->saveBMP("lightmap.bmp");
+    lightmap_buffer->saveBMP("lightmap.bmp");*/
     
     bool pressed = false;
 	while( NoQuitMessageSDL() && running )

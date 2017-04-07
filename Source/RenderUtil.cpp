@@ -27,6 +27,7 @@ Texture* default_tex;
 
 
 bool RENDER::scene_changed = false;
+bool USING_GPU = false;
 
 void RENDER::getOCLDevice() {
     //OpenCl
@@ -37,12 +38,30 @@ void RENDER::getOCLDevice() {
     //cl::Platform default_platform;
     //cl::Platform::get(&default_platform);
 
+    std::cout << std::endl;
+    std::cout << "---------------------------------------------------" << std::endl;
     std::cout << all_platforms.size() << " Platforms found!" << std::endl;
+    int platform_id = 0;
     if (all_platforms.size() == 0) {
         std::cout << " No platforms found. Check OpenCL installation!\n";
         exit(1);
-    }
+    } else {
+        
+        std::cout << "Multiple platforms available, please choose one: " << std::endl;
+        for (int i = 0; i < all_platforms.size(); i++) {
+            std::cout << i << " - " << all_platforms[i].getInfo<CL_PLATFORM_NAME>() << std::endl;
+        }
 
+        int a = 0;
+        std::cin >> a;
+
+        if (a >= 0 && a < all_platforms.size()) {
+            platform_id = a;
+        } else {
+            std::cout << "Invalid platform selection!" << std::endl;
+            exit(-1);
+        }
+    }
 
     cl::Platform default_platform = all_platforms[0];
     std::cout << "Using platform: " << default_platform.getInfo<CL_PLATFORM_NAME>() << "\n";
@@ -60,9 +79,11 @@ void RENDER::getOCLDevice() {
             exit(1);
         }
         std::cout << "No GPU found, running on CPU!" << std::endl;
+    } else {
+        USING_GPU = true;
     }
     device = new cl::Device(all_devices[0]);
-    std::cout << "Using platform: " << device->getInfo<CL_DEVICE_NAME>() << "\n";
+    std::cout << "Using device: " << device->getInfo<CL_DEVICE_NAME>() << "\n";
 }
 
 void RENDER::loadOCLKernels() {
@@ -75,7 +96,7 @@ void RENDER::loadOCLKernels() {
         //cl::Program* nProg = new cl::Program(start + n + ext, false, &err);
         std::ifstream t(start + n + ext);
         std::string str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-        std::cout << str << "\n";
+        //std::cout << str << "\n";
 
         cl::Program* nProg = new cl::Program(*context, str, false, &err);
         programs.emplace_back(nProg);
@@ -89,7 +110,11 @@ void RENDER::loadOCLKernels() {
     for (auto program : programs) {
         cl_int err;
         char options[128];
-        sprintf(options, "-D SCREEN_WIDTH=%d -D SCREEN_HEIGHT=%d", SCREEN_WIDTH, SCREEN_HEIGHT);
+        if (USING_GPU) {
+            sprintf(options, "-D SCREEN_WIDTH=%d -D SCREEN_HEIGHT=%d -D DEVICE_GPU=1", SCREEN_WIDTH, SCREEN_HEIGHT);
+        } else {
+            sprintf(options, "-D SCREEN_WIDTH=%d -D SCREEN_HEIGHT=%d -D DEVICE_CPU=1", SCREEN_WIDTH, SCREEN_HEIGHT);
+        }
         program->build({ *device }, options);
         
 
@@ -529,14 +554,16 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     kernels["fragment_main"]->setArg(4, sizeof(int), &shi);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
-    
+    const cl::NDRange offseta = cl::NDRange(0);
+
     queue->enqueueWriteBuffer(*frame_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer());
     queue->finish();
-
-    err = queue->enqueueNDRangeKernel(*kernels["fragment_main"], NULL, screen);
-    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    std::cout << "enqueuing kernel" << std::endl;
+    err = queue->enqueueNDRangeKernel(*kernels["fragment_main"], offseta, screen);
     queue->finish();
-
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    
+    std::cout << "copying back results" << std::endl;
     queue->enqueueReadBuffer(*frame_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer());
     queue->finish();
     clock_t end3 = clock();

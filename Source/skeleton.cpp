@@ -168,9 +168,9 @@ int main( int argc, char* argv[] )
                 Pixel& p3 = shadow_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];
                 
                 // TEMP: multiply by shadow factor
-                p2.r *= p3.r/255.0f;
-                p2.g *= p3.g/255.0f;
-                p2.b *= p3.b/255.0f;
+                p2.r *= p3.r/200.0f;
+                p2.g *= p3.g/200.0f;
+                p2.b *= p3.b/200.0f;
 
                 Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
                 *a = SDL_MapRGB(screen->format, ((float)p.r/255.0f*(float)p2.r/255.0f)*255, ((float)p.g/255.0f*(float)p2.g/255.0f) * 255, ((float)p.b/255.0f*(float)p2.b/255.0f)* 255);

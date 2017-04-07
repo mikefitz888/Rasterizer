@@ -63,7 +63,7 @@ void RENDER::getOCLDevice() {
         }
     }
 
-    cl::Platform default_platform = all_platforms[0];
+    cl::Platform default_platform = all_platforms[platform_id];
     std::cout << "Using platform: " << default_platform.getInfo<CL_PLATFORM_NAME>() << "\n";
 
     //get default device of the default platform

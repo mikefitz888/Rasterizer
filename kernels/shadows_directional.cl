@@ -9,7 +9,7 @@
 */
 #define SHADOW_BIAS 0.0001
 #define PCF_SAMPLES 4
-#define PCF_SAMPLE_RADIUS 2
+#define PCF_SAMPLE_RADIUS 1
 
 kernel void shadows_directional(global Fragment* fragment_buffer,
                  global Fragment* light_buffer,

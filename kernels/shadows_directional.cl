@@ -16,7 +16,9 @@ kernel void shadows_directional(global Fragment* fragment_buffer,
                  global Fragment* shadow_buffer,
                  mat4 LIGHT_VIEW_PROJECTION_MATRIX,
                  int sb_width, 
-                 int sb_height) {
+                 int sb_height,
+                 fvec3 campos,
+                 fvec3 lightdir) {
 
     /*
         Algorithm:
@@ -38,6 +40,7 @@ kernel void shadows_directional(global Fragment* fragment_buffer,
         shadow_result.r = 0; 
         shadow_result.g = 0; 
         shadow_result.b = 0; 
+        shadow_result.a = 0;
         shadow_buffer[id] = shadow_result; 
         return; 
     }
@@ -91,7 +94,7 @@ kernel void shadows_directional(global Fragment* fragment_buffer,
             if (projected_sample.z < light_space_proj.z-SHADOW_BIAS && projected_sample.z > 0) {
             //if (sample_fragment.depth < /*light_space_proj.z*/depth - SHADOW_BIAS && sample_fragment.depth > 0) {
                 // In Shadow
-                accum_result += 0.75f;
+                accum_result += 1.0f;
 
             }
         }
@@ -99,10 +102,35 @@ kernel void shadows_directional(global Fragment* fragment_buffer,
     // Divide result
     accum_result /= PCF_SAMPLES*PCF_SAMPLES;
     accum_result = 1.0f - accum_result;
+    float accum_result_f = clamp(accum_result + 0.25f, 0.0f, 1.0f); // Make shadows non black
 
-    shadow_result.r = (int)(accum_result * 255.0f);
-    shadow_result.g = (int)(accum_result * 255.0f);
-    shadow_result.b = (int)(accum_result * 255.0f);
+    /// --- Directional lighting
+    float3 N = (float3)(frag.nx, frag.ny, frag.nz); // Surface normal [WORLD SPACE]
+    float3 L = normalize((float3)(lightdir.x, lightdir.y, lightdir.z)); // Direction of light [WORLD SPACE]
+    float lambert = dot(N, L);
+    const float attenuation = 1.0f;
+    float diffuse = accum_result_f*lambert * 255.0f;
+    
+    const float3 lightcolour = (float3)(1.25f, 1.25f, 1.25f);
+    shadow_result.r = (int)(clamp(diffuse*lightcolour.x, 0.0f, 255.0f));
+    shadow_result.g = (int)(clamp(diffuse*lightcolour.y, 0.0f, 255.0f));
+    shadow_result.b = (int)(clamp(diffuse*lightcolour.z, 0.0f, 255.0f));
+
+    //// --- Specular factor ---
+    // Blinn-phong
+    float3 wpos = (float3)(frag.x, frag.y, frag.z);
+    float3 E = normalize(wpos-(float3)(campos.x, campos.y, campos.z)); // View direction
+    
+
+    //float lambert = dot(N, L);
+    float3 halfwayVector = normalize(L + E);
+
+    //float3 R = reflect(L, N);
+    //float3 V = normalize(vertex);
+    float spec = pow(max(dot(N, halfwayVector), 0.0f), 64.0f/*lerp(1.0, 512.0, 0.5f)*/);
+
+    // We use frag.a to store specularity for the fragment buffer
+    shadow_result.a = (int)(accum_result*spec*200.0f *  frag.a);//(int)(128.0f* accum_result);
 
     // Store result
     shadow_buffer[id] = shadow_result;

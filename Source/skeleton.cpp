@@ -147,7 +147,7 @@ int main( int argc, char* argv[] )
         }
 
         // Render Shadow buffer
-        RENDER::calculateShadows(frame_buffer, lightmap_buffer, shadow_buffer, sunlight_pos, sunlight_dir);
+        RENDER::calculateShadows(frame_buffer, lightmap_buffer, shadow_buffer, sunlight_pos, sunlight_dir, camposs);
 
         // Render SSAO buffer
         RENDER::calculateSSAO(frame_buffer, ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
@@ -167,15 +167,25 @@ int main( int argc, char* argv[] )
                 Pixel& p2 = frame_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];
                 Pixel& p3 = shadow_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];
                 
+                float r, g, b;
+                r = (float)p2.r;
+                g = (float)p2.g;
+                b = (float)p2.b;
+
                 // TEMP: multiply by shadow factor
-                p2.r *= p3.r/200.0f;
-                p2.g *= p3.g/200.0f;
-                p2.b *= p3.b/200.0f;
+                r *= (float)p3.r/255.0f;
+                g *= (float)p3.g / 255.0f;
+                b *= (float)p3.b / 255.0f;
+
+                // Add specular component
+                r += p3.a;
+                g += p3.a;
+                b += p3.a;
 
                 Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
-                *a = SDL_MapRGB(screen->format, ((float)p.r/255.0f*(float)p2.r/255.0f)*255, ((float)p.g/255.0f*(float)p2.g/255.0f) * 255, ((float)p.b/255.0f*(float)p2.b/255.0f)* 255);
+               // *a = SDL_MapRGB(screen->format, ((float)p.r/255.0f*(float)p2.r/255.0f)*255, ((float)p.g/255.0f*(float)p2.g/255.0f) * 255, ((float)p.b/255.0f*(float)p2.b/255.0f)* 255);
                 //*a = SDL_MapRGB(screen->format, p.r, p.g, p.b);
-
+                *a = SDL_MapRGB(screen->format, glm::clamp((int)r, 0, 255), glm::clamp((int)g, 0, 255), glm::clamp((int)b, 0, 255));
                 //PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
 
                 // Clear

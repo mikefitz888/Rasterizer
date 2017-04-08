@@ -154,7 +154,7 @@ public:
     static void calculateSSAO(FrameBuffer* in_frame_buffer, FrameBuffer* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir);
     static void buildSSAOSampleKernel(int sample_count);
 
-    static void calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir);
+    static void calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir, glm::vec3 campos);
 
     static void release();
     static inline cl::Context* getContext() { return RENDER::context; }

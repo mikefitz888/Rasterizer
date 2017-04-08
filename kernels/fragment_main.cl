@@ -108,6 +108,7 @@ kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* tri
     frag.r = tex_col.r;
     frag.g = tex_col.g;
     frag.b = tex_col.b;
+    frag.a = 1.0f; // Specularity
     
   /*  frag.r = frag.x*10.0f;
     frag.g = frag.y*10.0f;

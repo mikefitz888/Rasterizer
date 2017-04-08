@@ -84,6 +84,8 @@ void RENDER::getOCLDevice() {
     }
     device = new cl::Device(all_devices[0]);
     std::cout << "Using device: " << device->getInfo<CL_DEVICE_NAME>() << "\n";
+
+    std::cout << "PRIVATE MEM: " << device->getInfo<CL_DEVICE_MAX_CONSTANT_ARGS>() << std::endl;
 }
 
 void RENDER::loadOCLKernels() {
@@ -724,7 +726,7 @@ void RENDER::buildSSAOSampleKernel(int sample_num) {
 }
 
 // DIRECTIONAL SHADOWS
-void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir) {
+void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir, glm::vec3 campos) {
 
     int SHADOW_WIDTH  = in_light_buffer->getWidth();
     int SHADOW_HEIGHT = in_light_buffer->getHeight();
@@ -752,6 +754,12 @@ void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_ligh
     int sh = SHADOW_HEIGHT;
     kernels["shadows_directional"]->setArg(4, sizeof(int), &sw);
     kernels["shadows_directional"]->setArg(5, sizeof(int), &sh);
+
+    
+    kernels["shadows_directional"]->setArg(6, sizeof(cl_float)*3, &campos);
+    kernels["shadows_directional"]->setArg(7, sizeof(cl_float)*3, &lightdir);
+
+    
 
     // Enqueue kernel
     const cl::NDRange screen = cl::NDRange(CAMERA_WIDTH * CAMERA_HEIGHT);

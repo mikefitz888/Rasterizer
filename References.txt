@@ -10,3 +10,6 @@ TEXTURE FILTERING (GRADIENT CALCULATION)
 http://computergraphics.stackexchange.com/questions/1432/how-is-anisotropic-filtering-typically-implemented-in-modern-gpus
 	https://www.khronos.org/registry/OpenGL/extensions/EXT/EXT_texture_filter_anisotropic.txt
 https://en.wikipedia.org/wiki/Bilinear_filtering
+
+NORMAL MAPPING:
+https://learnopengl.com/#!Advanced-Lighting/Normal-Mapping

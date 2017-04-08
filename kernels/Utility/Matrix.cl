@@ -70,3 +70,11 @@ typedef struct __attribute__((packed)) {
     ufvec4 v0, v1, v2;
     uint id;
 } triplet;
+
+inline float3 mul3(float3 input, mat3 mat) {
+    float3 vec;
+    vec.x = input.x*mat.m00 + input.y*mat.m10 + input.z*mat.m20;
+    vec.y = input.x*mat.m01 + input.y*mat.m11 + input.z*mat.m21;
+    vec.z = input.x*mat.m02 + input.y*mat.m12 + input.z*mat.m22;
+    return vec;
+}

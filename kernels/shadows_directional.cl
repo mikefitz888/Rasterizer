@@ -102,12 +102,12 @@ kernel void shadows_directional(global Fragment* fragment_buffer,
     // Divide result
     accum_result /= PCF_SAMPLES*PCF_SAMPLES;
     accum_result = 1.0f - accum_result;
-    float accum_result_f = clamp(accum_result + 0.25f, 0.0f, 1.0f); // Make shadows non black
+    float accum_result_f = clamp(accum_result + 0.15f, 0.0f, 1.0f); // Make shadows non black
 
     /// --- Directional lighting
     float3 N = (float3)(frag.nx, frag.ny, frag.nz); // Surface normal [WORLD SPACE]
     float3 L = normalize((float3)(lightdir.x, lightdir.y, lightdir.z)); // Direction of light [WORLD SPACE]
-    float lambert = dot(N, L);
+    float lambert = clamp(dot(N, L) + 0.15f, 0.15f, 1.0f);
     const float attenuation = 1.0f;
     float diffuse = accum_result_f*lambert * 255.0f;
     
@@ -127,10 +127,10 @@ kernel void shadows_directional(global Fragment* fragment_buffer,
 
     //float3 R = reflect(L, N);
     //float3 V = normalize(vertex);
-    float spec = pow(max(dot(N, halfwayVector), 0.0f), 48.0f/*lerp(1.0, 512.0, 0.5f)*/);
+    float spec = pow(max(dot(N, halfwayVector), 0.0f), 256.0f/*lerp(1.0, 512.0, 0.5f)*/);
 
     // We use frag.a to store specularity for the fragment buffer
-    shadow_result.a = (int)(accum_result*spec*200.0f *  (float)(frag.a/255.0f));//(int)(128.0f* accum_result);
+    shadow_result.a = (int)(accum_result*spec*255.0f *  (float)(frag.a/255.0f));//(int)(128.0f* accum_result);
 
     // Store result
     shadow_buffer[id] = shadow_result;

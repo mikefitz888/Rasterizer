@@ -182,6 +182,11 @@ int main( int argc, char* argv[] )
                 g += p3.a;
                 b += p3.a;
 
+                // Apply SSAO
+                r *= (float)p.r / 255.0f;
+                g *= (float)p.g / 255.0f;
+                b *= (float)p.b / 255.0f;
+
                 Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
                // *a = SDL_MapRGB(screen->format, ((float)p.r/255.0f*(float)p2.r/255.0f)*255, ((float)p.g/255.0f*(float)p2.g/255.0f) * 255, ((float)p.b/255.0f*(float)p2.b/255.0f)* 255);
                 //*a = SDL_MapRGB(screen->format, p.r, p.g, p.b);

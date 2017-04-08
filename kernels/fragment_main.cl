@@ -1,4 +1,5 @@
 #include "kernels/Textures/Textures.cl"
+#include "kernels/Utility/Matrix.cl"
 
 typedef struct __attribute__((packed)) {
     float x, y, z;
@@ -102,13 +103,7 @@ kernel void fragment_main(global Fragment* fragment_buffer,
 
 
     /// ---------------------------------------------------------- ///
-    // TEMP - visualise normals
-   /* frag.r = 255 * (frag.nx*0.5 + 0.5);
-    frag.g = 255 * (frag.ny*0.5 + 0.5);
-    frag.b = 255 * (frag.nz*0.5 + 0.5);*/
-    
-
-    // TEMP BILINEAR FILTERING
+    // BILINEAR FILTERING
     // Tmp calculate aniso factor 
     Colour tex_col = texture2D_bilinear(default_tex, frag.uvx, frag.uvy, frag);
     //Colour tex_col = texture2D_LOD(default_tex, frag.uvx, frag.uvy, 0);
@@ -119,18 +114,60 @@ kernel void fragment_main(global Fragment* fragment_buffer,
 
     /// ---------------------------------------------------------- ///
     // Merge normal + specular map with fragment buffer
-    Colour norm_col = texture2D_bilinear(normal_tex, frag.uvx, frag.uvy, frag);
-    Colour spec_col = texture2D_bilinear(specular_tex, frag.uvx, frag.uvy, frag);
+    /*
+        By simply modifying the fragment buffer normals and specular values here,
+        we can apply normal mapping to all subsequent lighting calculations :)
 
+        Reference:
+        https://learnopengl.com/#!Advanced-Lighting/Normal-Mapping
+    */
+    // Specular
+    Colour spec_col = texture2D_bilinear(specular_tex, frag.uvx, frag.uvy, frag);
     frag.a = spec_col.r;
 
+    // Normal mapping
+    Colour norm_col = texture2D_bilinear(normal_tex, frag.uvx, frag.uvy, frag);
+    float3 normal_t = (float3)(((float)norm_col.r / 255.0f)*2.0f - 1.0f,
+                             ((float)norm_col.g / 255.0f)*2.0f - 1.0f,
+                             ((float)norm_col.b / 255.0f)*2.0f - 1.0f);
     
-  /*  frag.r = frag.x*10.0f;
-    frag.g = frag.y*10.0f;
-    frag.b = frag.z*10.0f;*/
+    float f = 1.0f / (/*deltaUV1.x*/dudx * /*deltaUV2.y*/dvdy - /*deltaUV2.x*/dvdx * /*deltaUV1.y*/dudy);
+    
+    float3 edge1, edge2;
+    edge1 = (float3)(t.v1.x, t.v1.y, t.v1.z) - (float3)(t.v0.x, t.v0.y, t.v0.z);
+    edge2 = (float3)(t.v2.x, t.v2.y, t.v2.z) - (float3)(t.v0.x, t.v0.y, t.v0.z);
 
-    // Reset depth
-    //frag.depth = 0.0f;
+    float3 tangent, bitangent;
+    tangent.x = f * (dvdy * edge1.x - dudy * edge2.x);
+    tangent.y = f * (dvdy * edge1.y - dudy * edge2.y);
+    tangent.z = f * (dvdy * edge1.z - dudy * edge2.z);
+    tangent = normalize(tangent);
+
+    bitangent.x = f * (-dvdx * edge1.x + dudx * edge2.x);
+    bitangent.y = f * (-dvdx * edge1.y + dudx * edge2.y);
+    bitangent.z = f * (-dvdx * edge1.z + dudx * edge2.z);
+    bitangent = normalize(bitangent);
+
+    mat3 TBN;
+    TBN.m00 = tangent.x;
+    TBN.m01 = tangent.y;
+    TBN.m02 = tangent.z;
+
+    TBN.m10 = bitangent.x;
+    TBN.m11 = bitangent.y;
+    TBN.m12 = bitangent.z;
+
+    TBN.m20 = frag.nx;
+    TBN.m21 = frag.ny;
+    TBN.m22 = frag.nz;
+
+    normal_t = normalize(mul3(normal_t, TBN));
+
+    // Assign to frag
+    frag.nx = normal_t.x;
+    frag.ny = normal_t.y;
+    frag.nz = normal_t.z;
+
 
     
     // Write out result:

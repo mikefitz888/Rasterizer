@@ -29,7 +29,14 @@ typedef struct __attribute__((packed)) {
 
 
 
-kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* triangle_buffer_all, global Colour* default_tex, int screen_width, int screen_height){
+kernel void fragment_main(global Fragment* fragment_buffer, 
+                          global Triangle* triangle_buffer_all, 
+                          global Colour* default_tex, 
+                          global Colour* normal_tex,
+                          global Colour* specular_tex,
+                          int screen_width, 
+                          int screen_height){
+
     uint id = get_global_id(0);
     Fragment frag = fragment_buffer[id];
     uint td = frag.triangle_id;
@@ -108,7 +115,15 @@ kernel void fragment_main(global Fragment* fragment_buffer, global Triangle* tri
     frag.r = tex_col.r;
     frag.g = tex_col.g;
     frag.b = tex_col.b;
-    frag.a = 1.0f; // Specularity
+    frag.a = 255; // Specularity
+
+    /// ---------------------------------------------------------- ///
+    // Merge normal + specular map with fragment buffer
+    Colour norm_col = texture2D_bilinear(normal_tex, frag.uvx, frag.uvy, frag);
+    Colour spec_col = texture2D_bilinear(specular_tex, frag.uvx, frag.uvy, frag);
+
+    frag.a = spec_col.r;
+
     
   /*  frag.r = frag.x*10.0f;
     frag.g = frag.y*10.0f;

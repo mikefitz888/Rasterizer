@@ -24,7 +24,8 @@ std::map<std::string, cl::Kernel*> RENDER::kernels;
 
 // Texutres
 Texture* default_tex;
-
+Texture* normal_map;
+Texture* specular_map;
 
 bool RENDER::scene_changed = false;
 bool USING_GPU = false;
@@ -168,7 +169,9 @@ void RENDER::allocateOCLBuffers() {
     
     // LOAD TEXTURES:
     //std::string str = "Resource/T1.bmp";
-    default_tex = new Texture("Resources/T1.bmp", context, queue);
+    default_tex  = new Texture("Resources/T1.bmp", context, queue);
+    normal_map   = new Texture("Resources/N1.bmp", context, queue);
+    specular_map = new Texture("Resources/S1.bmp", context, queue);
 }
 
 void RENDER::writeTriangles() {
@@ -550,10 +553,12 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     kernels["fragment_main"]->setArg(0, *frame_buffer->getGPUBuffer());
     kernels["fragment_main"]->setArg(1, *triangle_buf_alldata);
     kernels["fragment_main"]->setArg(2, *default_tex->getGPUPtr());
+    kernels["fragment_main"]->setArg(3, *normal_map->getGPUPtr());
+    kernels["fragment_main"]->setArg(4, *specular_map->getGPUPtr());
     int swi = WIDTH;
     int shi = HEIGHT;
-    kernels["fragment_main"]->setArg(3, sizeof(int), &swi);
-    kernels["fragment_main"]->setArg(4, sizeof(int), &shi);
+    kernels["fragment_main"]->setArg(5, sizeof(int), &swi);
+    kernels["fragment_main"]->setArg(6, sizeof(int), &shi);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     const cl::NDRange offseta = cl::NDRange(0);

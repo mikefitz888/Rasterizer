@@ -127,10 +127,10 @@ kernel void shadows_directional(global Fragment* fragment_buffer,
 
     //float3 R = reflect(L, N);
     //float3 V = normalize(vertex);
-    float spec = pow(max(dot(N, halfwayVector), 0.0f), 64.0f/*lerp(1.0, 512.0, 0.5f)*/);
+    float spec = pow(max(dot(N, halfwayVector), 0.0f), 48.0f/*lerp(1.0, 512.0, 0.5f)*/);
 
     // We use frag.a to store specularity for the fragment buffer
-    shadow_result.a = (int)(accum_result*spec*200.0f *  frag.a);//(int)(128.0f* accum_result);
+    shadow_result.a = (int)(accum_result*spec*200.0f *  (float)(frag.a/255.0f));//(int)(128.0f* accum_result);
 
     // Store result
     shadow_buffer[id] = shadow_result;

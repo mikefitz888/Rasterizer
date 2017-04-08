@@ -50,6 +50,8 @@ glm::vec3 camdir(0.0f, 0.0f, 1.0f);
 
 glm::vec3 sunlight_pos(-26.256, -33.5917, 19.1776);
 glm::vec3 sunlight_dir(0.64513, 0.692729, -0.322388);
+
+glm::vec3 plight_pos(0.0f, -1.0f, 0.0f);
 bool running = true;
 
 float yaw = 0.0f, pitch = 0.0f;
@@ -98,6 +100,7 @@ int main( int argc, char* argv[] )
     FrameBuffer* frame_buffer  = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
     FrameBuffer* ssao_buffer   = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
     FrameBuffer* shadow_buffer = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
+   // FrameBuffer* lighting_buffer = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
 
     // Generate SSAO Kernel
     int sample_count = 128;
@@ -149,8 +152,22 @@ int main( int argc, char* argv[] )
         // Render Shadow buffer
         RENDER::calculateShadows(frame_buffer, lightmap_buffer, shadow_buffer, sunlight_pos, sunlight_dir, camposs);
 
+        // Calculate lighting
+       // for (int i = 0; i < 10; i++) {
+            RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, camdir, plight_pos, glm::vec3(1.0f, 0.5f, 0.5f), 5.0f, 0.5f, 128.0f);
+            //RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, camdir, camposs, glm::vec3(0.5f, 1.0f, 0.5f), 20.0f, 0.5f, 128.0f);
+           /* RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, glm::vec3(-10.f, -10.0f, 1.0f), glm::vec3(1.0f, 0.5f, 0.5f), 20.0f, 0.5f, 128.0f);
+            RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, glm::vec3(10.f, -10.0f, 1.0f), glm::vec3(1.0f, 0.5f, 0.5f), 20.0f, 0.5f, 128.0f);
+            RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, glm::vec3(-10.f, 10.0f, 1.0f), glm::vec3(1.0f, 0.5f, 0.5f), 20.0f, 0.5f, 128.0f);*/
+    //    }
+
         // Render SSAO buffer
         RENDER::calculateSSAO(frame_buffer, ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
+       
+        // TEMP: Copy back lighting buffer
+        frame_buffer->transferGPUtoCPU();
+        ssao_buffer->transferGPUtoCPU();
+        shadow_buffer->transferGPUtoCPU();
 
         clock_t e = clock();
 
@@ -192,9 +209,10 @@ int main( int argc, char* argv[] )
                 //*a = SDL_MapRGB(screen->format, p.r, p.g, p.b);
                 *a = SDL_MapRGB(screen->format, glm::clamp((int)r, 0, 255), glm::clamp((int)g, 0, 255), glm::clamp((int)b, 0, 255));
                 //PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
-
+                //*a = SDL_MapRGB(screen->format, glm::clamp((int)p3.r, 0, 255), glm::clamp((int)p3.g, 0, 255), glm::clamp((int)p3.b, 0, 255));
                 // Clear
                 frame_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH].depth = 0;
+
             }
         }
 
@@ -212,6 +230,7 @@ int main( int argc, char* argv[] )
     delete frame_buffer;
     delete ssao_buffer;
     delete lightmap_buffer;
+    //delete lighting_buffer;
 
 	SDL_SaveBMP( screen, "screenshot.bmp" );
 	return 0;
@@ -257,6 +276,9 @@ void Update()
     }
     if (!keystate[SDLK_p]) {
         p_pressed = false;
+    }
+    if (keystate[SDLK_l]) {
+        plight_pos = camposs;
     }
 
     if (mouse_look_enabled) {

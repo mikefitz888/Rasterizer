@@ -11,7 +11,7 @@
 #define PCF_SAMPLES 4
 #define PCF_SAMPLE_RADIUS 1
 
-kernel void shadows_directional(global Fragment* fragment_buffer,
+kernel void shader_directional_light_shadow(global Fragment* fragment_buffer,
                  global Fragment* light_buffer,
                  global Fragment* shadow_buffer,
                  mat4 LIGHT_VIEW_PROJECTION_MATRIX,

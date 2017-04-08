@@ -14,7 +14,7 @@
 
 
 
-kernel void ssao(global Fragment* fragment_buffer, global Fragment* ssao_buffer, global float3* sample_kernel, int sample_count, mat4 MVP_MATRIX, int screen_width, int screen_height) {
+kernel void shader_post_ssao(global Fragment* fragment_buffer, global Fragment* ssao_buffer, global float3* sample_kernel, int sample_count, mat4 MVP_MATRIX, int screen_width, int screen_height) {
     uint id = get_global_id(0);
     Fragment frag = fragment_buffer[id];
     Fragment ssao_result = ssao_buffer[id];

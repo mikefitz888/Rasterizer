@@ -91,7 +91,13 @@ void RENDER::getOCLDevice() {
 
 void RENDER::loadOCLKernels() {
     //also create + builds programs
-    std::vector<std::string> kernel_names = { "rasterizer", "projection", "fragment_main", "aabb", "ssao", "shadows_directional" };
+    std::vector<std::string> kernel_names = {   "rasterizer", 
+                                                "projection", 
+                                                "fragment_main", 
+                                                "aabb", 
+                                                "shader_post_ssao", 
+                                                "shader_directional_light_shadow",
+                                                "shader_point_light" };
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -571,8 +577,8 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     
     std::cout << "copying back results" << std::endl;
-    queue->enqueueReadBuffer(*frame_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer());
-    queue->finish();
+    //queue->enqueueReadBuffer(*frame_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer());
+    //queue->finish();
     clock_t end3 = clock();
     elapsed_secs = 1000 * double(end3 - begin3) / CLOCKS_PER_SEC;
     std::cout << "Fragment: " << elapsed_secs << "ms" << std::endl;
@@ -681,26 +687,26 @@ void RENDER::calculateSSAO(FrameBuffer* in_frame_buffer, FrameBuffer* out_ssao_b
     glm::mat4 MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
 
     // Set kernel args
-    kernels["ssao"]->setArg(0, *in_frame_buffer->getGPUBuffer());
-    kernels["ssao"]->setArg(1, *out_ssao_buffer->getGPUBuffer());
-    kernels["ssao"]->setArg(2, *ssao_sample_kernel);
-    kernels["ssao"]->setArg(3, sizeof(int), &sample_count);
-    kernels["ssao"]->setArg(4, sizeof(cl_float) * 16, glm::value_ptr(MVP_MATRIX));
+    kernels["shader_post_ssao"]->setArg(0, *in_frame_buffer->getGPUBuffer());
+    kernels["shader_post_ssao"]->setArg(1, *out_ssao_buffer->getGPUBuffer());
+    kernels["shader_post_ssao"]->setArg(2, *ssao_sample_kernel);
+    kernels["shader_post_ssao"]->setArg(3, sizeof(int), &sample_count);
+    kernels["shader_post_ssao"]->setArg(4, sizeof(cl_float) * 16, glm::value_ptr(MVP_MATRIX));
 
     int sw = WIDTH;
     int sh = HEIGHT;
-    kernels["ssao"]->setArg(5, sizeof(int), &sw);
-    kernels["ssao"]->setArg(6, sizeof(int), &sh);
+    kernels["shader_post_ssao"]->setArg(5, sizeof(int), &sw);
+    kernels["shader_post_ssao"]->setArg(6, sizeof(int), &sh);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
 
     // Temp: copy back SSAO buffer (This wont be needed as we can just leave it on the GPU until the combine step
-    cl_int err = queue->enqueueNDRangeKernel(*kernels["ssao"], NULL, screen);
+    cl_int err = queue->enqueueNDRangeKernel(*kernels["shader_post_ssao"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     queue->finish();
 
-    queue->enqueueReadBuffer(*out_ssao_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * WIDTH * HEIGHT, out_ssao_buffer->getCPUBuffer());
-    queue->finish();
+    //queue->enqueueReadBuffer(*out_ssao_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * WIDTH * HEIGHT, out_ssao_buffer->getCPUBuffer());
+   // queue->finish();
 }
 
 void RENDER::buildSSAOSampleKernel(int sample_num) {
@@ -750,30 +756,129 @@ void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_ligh
     glm::mat4 LIGHT_MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
 
     // Set kernel args
-    kernels["shadows_directional"]->setArg(0, *in_frame_buffer->getGPUBuffer());
-    kernels["shadows_directional"]->setArg(1, *in_light_buffer->getGPUBuffer());
-    kernels["shadows_directional"]->setArg(2, *out_shadow_buffer->getGPUBuffer());
-    kernels["shadows_directional"]->setArg(3, sizeof(cl_float) * 16, glm::value_ptr(LIGHT_MVP_MATRIX));
+    kernels["shader_directional_light_shadow"]->setArg(0, *in_frame_buffer->getGPUBuffer());
+    kernels["shader_directional_light_shadow"]->setArg(1, *in_light_buffer->getGPUBuffer());
+    kernels["shader_directional_light_shadow"]->setArg(2, *out_shadow_buffer->getGPUBuffer());
+    kernels["shader_directional_light_shadow"]->setArg(3, sizeof(cl_float) * 16, glm::value_ptr(LIGHT_MVP_MATRIX));
 
     int sw = SHADOW_WIDTH;
     int sh = SHADOW_HEIGHT;
-    kernels["shadows_directional"]->setArg(4, sizeof(int), &sw);
-    kernels["shadows_directional"]->setArg(5, sizeof(int), &sh);
-
-    
-    kernels["shadows_directional"]->setArg(6, sizeof(cl_float)*3, &campos);
-    kernels["shadows_directional"]->setArg(7, sizeof(cl_float)*3, &lightdir);
+    kernels["shader_directional_light_shadow"]->setArg(4, sizeof(int), &sw);
+    kernels["shader_directional_light_shadow"]->setArg(5, sizeof(int), &sh);
+    kernels["shader_directional_light_shadow"]->setArg(6, sizeof(cl_float)*3, &campos);
+    kernels["shader_directional_light_shadow"]->setArg(7, sizeof(cl_float)*3, &lightdir);
 
     
 
     // Enqueue kernel
     const cl::NDRange screen = cl::NDRange(CAMERA_WIDTH * CAMERA_HEIGHT);
-    cl_int err = queue->enqueueNDRangeKernel(*kernels["shadows_directional"], NULL, screen);
+    cl_int err = queue->enqueueNDRangeKernel(*kernels["shader_directional_light_shadow"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     queue->finish();
 
-    queue->enqueueReadBuffer(*out_shadow_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * CAMERA_WIDTH * CAMERA_HEIGHT, out_shadow_buffer->getCPUBuffer());
-    queue->finish();
+    //queue->enqueueReadBuffer(*out_shadow_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * CAMERA_WIDTH * CAMERA_HEIGHT, out_shadow_buffer->getCPUBuffer());
+    //queue->finish();
+}
+
+// Point lights (Deferred)
+//  - TODO: only enqueue the range of the kernel needed for points in the light. this allows far away lights to become very efficient.
+//  - We can ignore the kernel running if no pixels in view are affected by the light.
+void RENDER::calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_lighting_accum, glm::vec3 campos, glm::vec3 camdir, glm::vec3 lightpos, glm::vec3 lightcolour, float light_range, float specularity, float glossiness) {
+    
+    // Camera Properties
+    float znear = 0.5f;
+    float zfar = 250.0f;
+    float FOV = 70.0f;
+    float aspect = (float)in_frame_buffer->getWidth() / (float)in_frame_buffer->getHeight();
+
+    // Construct matrices
+    glm::mat4 VIEW_MATRIX = glm::lookAt(campos, campos + camdir, glm::vec3(0, 1, 0));
+    glm::mat4 PROJECTION_MATRIX = glm::perspective(FOV*glm::pi<float>() / 180.0f, -((float)in_frame_buffer->getWidth() / (float)in_frame_buffer->getHeight()), znear, zfar);
+    glm::mat4 MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
+
+    // Prepare range
+    int xmin = in_frame_buffer->getWidth();
+    int ymin = in_frame_buffer->getHeight();
+    int xmax = 0;
+    int ymax = 0;
+
+    // Project light point into centre of screen
+    /*
+        We calculate the range of pixels the kernel needs to execute over by projecting the corners
+        of the light bounding area into screen-space.
+
+        This saves computational power by not processing the area that a light does not affect.
+    */
+    std::vector<glm::vec3> points = {
+        glm::vec3(lightpos.x - light_range, lightpos.y - light_range, lightpos.z - light_range),
+        glm::vec3(lightpos.x - light_range, lightpos.y - light_range, lightpos.z + light_range),
+        glm::vec3(lightpos.x - light_range, lightpos.y + light_range, lightpos.z - light_range),
+        glm::vec3(lightpos.x - light_range, lightpos.y + light_range, lightpos.z + light_range),
+        glm::vec3(lightpos.x + light_range, lightpos.y - light_range, lightpos.z - light_range),
+        glm::vec3(lightpos.x + light_range, lightpos.y - light_range, lightpos.z + light_range),
+        glm::vec3(lightpos.x + light_range, lightpos.y + light_range, lightpos.z - light_range),
+        glm::vec3(lightpos.x + light_range, lightpos.y + light_range, lightpos.z + light_range)
+    };
+
+    for (auto &p : points) {
+        glm::vec4 light_screenspace = MVP_MATRIX*glm::vec4(p.x, p.y, p.z, 1.0f);
+        light_screenspace /= light_screenspace.w;
+        light_screenspace.x *= 0.5f;
+        light_screenspace.y *= 0.5f;
+        light_screenspace.x += 0.5f;
+        light_screenspace.y += 0.5f;
+        light_screenspace.x *= in_frame_buffer->getWidth();
+        light_screenspace.y *= in_frame_buffer->getHeight();
+
+        /*if (light_screenspace.x >= 0 && 
+            light_screenspace.y >= 0 && 
+            light_screenspace.x < in_frame_buffer->getWidth() &&
+            light_screenspace.y < in_frame_buffer->getHeight()) {*/
+
+            xmin = glm::min(xmin, (int)light_screenspace.x);
+            ymin = glm::min(ymin, (int)light_screenspace.y);
+            xmax = glm::max(xmax, (int)light_screenspace.x);
+            ymax = glm::max(ymax, (int)light_screenspace.y);
+        //}
+    }
+    std::cout << "Light (" << xmin << "," << ymin << ") to (" << xmax << "," << ymax << ")" << std::endl;
+    xmin = glm::clamp(xmin, 0, in_frame_buffer->getWidth()-1);
+    ymin = glm::clamp(ymin, 0, in_frame_buffer->getHeight()-1);
+    xmax = glm::clamp(xmax, 0, in_frame_buffer->getWidth()-1);
+    ymax = glm::clamp(ymax, 0, in_frame_buffer->getHeight()-1);
+
+    // calculate area
+    int area = (xmax - xmin)*(ymax - ymin);
+
+    if (area > 0 && xmax > xmin && ymax > ymin) {
+
+
+
+        // Set kernel args
+        kernels["shader_point_light"]->setArg(0, *in_frame_buffer->getGPUBuffer());
+        kernels["shader_point_light"]->setArg(1, *out_lighting_accum->getGPUBuffer());
+        kernels["shader_point_light"]->setArg(2, sizeof(cl_float) * 3, &campos);
+        kernels["shader_point_light"]->setArg(3, sizeof(cl_float) * 3, &lightpos);
+        kernels["shader_point_light"]->setArg(4, sizeof(cl_float) * 3, &lightcolour);
+        kernels["shader_point_light"]->setArg(5, sizeof(cl_float), &light_range);
+        kernels["shader_point_light"]->setArg(6, sizeof(cl_float), &specularity);
+        kernels["shader_point_light"]->setArg(7, sizeof(cl_float), &glossiness);
+
+        int width = in_frame_buffer->getWidth();
+        kernels["shader_point_light"]->setArg(8, sizeof(cl_int), &width);
+
+        const cl::NDRange screen = cl::NDRange(xmax-xmin, ymax-ymin);
+        const cl::NDRange offset = cl::NDRange(xmin, ymin);
+
+        // Enqueue kernel
+        cl_int err = queue->enqueueNDRangeKernel(*kernels["shader_point_light"], offset, screen);
+        if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+        queue->finish();
+    }
+
+    // TEMP: Transfer results back to CPU (only needed for debugging purposes)
+    //queue->enqueueReadBuffer(*out_lighting_accum->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) *in_frame_buffer->getWidth()*in_frame_buffer->getHeight(), out_lighting_accum->getCPUBuffer());
+    //queue->finish();
 }
 
 
@@ -824,4 +929,8 @@ void FrameBuffer::clear() {
             this->cpu_buffer[i + j*this->width] = {};
         }
     }
+}
+void FrameBuffer::transferGPUtoCPU() {
+    RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) *this->getWidth()*this->getHeight(), this->getCPUBuffer());
+    RENDER::queue->finish();
 }

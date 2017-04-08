@@ -99,6 +99,7 @@ public:
     int getHeight();
     void saveBMP(const std::string filename);
     void clear();
+    void transferGPUtoCPU();
 };
 
 class RENDER {
@@ -119,7 +120,7 @@ class RENDER {
 
     static cl::Device* device;
     static cl::Context* context;
-    static cl::CommandQueue* queue;
+    
     static std::vector<cl::Program*> programs;
     static std::map<std::string, cl::Kernel*> kernels;
     static AABB* local_aabb_buff;
@@ -146,6 +147,7 @@ class RENDER {
 
 public:
     //static cl::Buffer* frame_buff;
+    static cl::CommandQueue* queue;
 
     static void initialize();
     static void addTriangle(Triangle& triangle);
@@ -155,6 +157,7 @@ public:
     static void buildSSAOSampleKernel(int sample_count);
 
     static void calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir, glm::vec3 campos);
+    static void calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_lighting_accum, glm::vec3 campos, glm::vec3 camdir, glm::vec3 lightpos, glm::vec3 lightcolour, float light_range, float specularity, float glossiness);
 
     static void release();
     static inline cl::Context* getContext() { return RENDER::context; }

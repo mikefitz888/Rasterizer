@@ -97,7 +97,8 @@ void RENDER::loadOCLKernels() {
                                                 "aabb", 
                                                 "shader_post_ssao", 
                                                 "shader_directional_light_shadow",
-                                                "shader_point_light" };
+                                                "shader_point_light",
+                                                "accumulate_buffers"};
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -896,7 +897,21 @@ void RENDER::calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_
     //queue->finish();
 }
 
+void RENDER::accumulateBuffers(FrameBuffer* in_frame_buffer, FrameBuffer* in_ssao_buffer, FrameBuffer* in_shadow_buffer, int WIDTH, int HEIGHT) {
 
+    // Set kernel args
+    kernels["accumulate_buffers"]->setArg(0, *in_frame_buffer->getGPUBuffer_colour());
+    kernels["accumulate_buffers"]->setArg(1, *in_ssao_buffer->getGPUBuffer_colour());
+    kernels["accumulate_buffers"]->setArg(2, *in_shadow_buffer->getGPUBuffer_colour());
+
+    // Construct range
+    const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
+
+    // Enqueue kernel
+    cl_int err = queue->enqueueNDRangeKernel(*kernels["accumulate_buffers"], NULL, screen);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    queue->finish();
+}
 
 // Framebuffer
 FrameBuffer::FrameBuffer(int width, int height, const cl::Context *context) {

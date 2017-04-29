@@ -200,12 +200,20 @@ public:
     static void initialize();
     static void addTriangle(Triangle& triangle);
 
+    // Main rasterization process
     static void renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 camdir);
+    
+    // Post process
     static void calculateSSAO(FrameBuffer* in_frame_buffer, FrameBuffer* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir);
     static void buildSSAOSampleKernel(int sample_count);
 
+    // Lighting
     static void calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir, glm::vec3 campos);
     static void calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_lighting_accum, glm::vec3 campos, glm::vec3 camdir, glm::vec3 lightpos, glm::vec3 lightcolour, float light_range, float specularity, float glossiness);
+
+    // Result accumulation
+    static void accumulateBuffers(FrameBuffer* in_frame_buffer, FrameBuffer* in_ssao_buffer, FrameBuffer* in_shadow_buffer, int WIDTH, int HEIGHT);
+
 
     static void release();
     static inline cl::Context* getContext() { return RENDER::context; }

@@ -164,10 +164,14 @@ int main( int argc, char* argv[] )
         // Render SSAO buffer
         RENDER::calculateSSAO(frame_buffer, ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
        
+
+        // Accumulate results on GPU
+        RENDER::accumulateBuffers(frame_buffer, ssao_buffer, shadow_buffer, SCREEN_WIDTH, SCREEN_HEIGHT);
+
         // TEMP: Copy back lighting buffer
         frame_buffer->transferGPUtoCPU_Colour();
-        ssao_buffer->transferGPUtoCPU_Colour();
-        shadow_buffer->transferGPUtoCPU_Colour();
+        /*ssao_buffer->transferGPUtoCPU_Colour();
+        shadow_buffer->transferGPUtoCPU_Colour();*/
 
         clock_t e = clock();
 
@@ -180,9 +184,9 @@ int main( int argc, char* argv[] )
 #pragma omp parallel for
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
-                PixelColour& p = ssao_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
+                //PixelColour& p = ssao_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
                 PixelColour& p2 = frame_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];
-                PixelColour& p3 = shadow_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];
+                //PixelColour& p3 = shadow_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];
                 
                 float r, g, b;
                 r = (float)p2.r;
@@ -190,7 +194,7 @@ int main( int argc, char* argv[] )
                 b = (float)p2.b;
 
                 // TEMP: multiply by shadow factor
-                r *= (float)p3.r/255.0f;
+           /*     r *= (float)p3.r/255.0f;
                 g *= (float)p3.g / 255.0f;
                 b *= (float)p3.b / 255.0f;
 
@@ -202,7 +206,7 @@ int main( int argc, char* argv[] )
                 // Apply SSAO
                 r *= (float)p.r / 255.0f;
                 g *= (float)p.g / 255.0f;
-                b *= (float)p.b / 255.0f;
+                b *= (float)p.b / 255.0f;*/
 
                 Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
                // *a = SDL_MapRGB(screen->format, ((float)p.r/255.0f*(float)p2.r/255.0f)*255, ((float)p.g/255.0f*(float)p2.g/255.0f) * 255, ((float)p.b/255.0f*(float)p2.b/255.0f)* 255);

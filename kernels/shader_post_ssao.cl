@@ -14,13 +14,26 @@
 
 
 
-kernel void shader_post_ssao(global Fragment* fragment_buffer, global Fragment* ssao_buffer, global float3* sample_kernel, int sample_count, mat4 MVP_MATRIX, int screen_width, int screen_height) {
+kernel void shader_post_ssao(global FragmentWPos* fragment_buffer_wpos,
+                             global FragmentNormal* fragment_buffer_normal, 
+                             global FragmentTData* fragment_buffer_tdata,
+
+                             global FragmentColour* ssao_buffer_colour,
+
+                             global float3* sample_kernel, 
+                             int sample_count, 
+                             mat4 MVP_MATRIX, 
+                             int screen_width, 
+                             int screen_height) {
+
     uint id = get_global_id(0);
-    Fragment frag = fragment_buffer[id];
-    Fragment ssao_result = ssao_buffer[id];
+    FragmentWPos   fragWpos   = fragment_buffer_wpos[id];
+    FragmentTData  fragTdata  = fragment_buffer_tdata[id];
+    FragmentNormal fragNormal = fragment_buffer_normal[id];
+    FragmentColour ssao_result;
 
     /// ------------------- SSAO PROCESS ---------------------------
-    if (frag.depth <= 0) { ssao_buffer[id].r = 0; ssao_buffer[id].g = 0; ssao_buffer[id].b = 0; return; }
+    if (fragTdata.depth <= 0) { ssao_buffer_colour[id].r = 0; ssao_buffer_colour[id].g = 0; ssao_buffer_colour[id].b = 0; return; }
 
     // Depth factor
     //float depthfactor = clamp(30.0f / (frag.depth + 0.01f), 0.3f, MAX_SAMPLE_RADIUS);
@@ -29,7 +42,7 @@ kernel void shader_post_ssao(global Fragment* fragment_buffer, global Fragment* 
     float sample_result = 0.0f;
 
     for (int i = 0; i < sample_count; i++) {
-        float3 wpos = (float3)(frag.x, frag.y, frag.z);
+        float3 wpos = (float3)(fragWpos.x, fragWpos.y, fragWpos.z);
 
         // Perform sample
         wpos += sample_kernel[i]/*depthfactor*/; // Re-scale
@@ -55,10 +68,12 @@ kernel void shader_post_ssao(global Fragment* fragment_buffer, global Fragment* 
 
         int sample_id = coord.x + coord.y * screen_width;
         sample_id = clamp(sample_id, 0, screen_width * screen_height - 1);
-        Fragment sample_fragment = fragment_buffer[sample_id];
+
+        FragmentWPos   sample_fragment_wpos = fragment_buffer_wpos[sample_id];
+        FragmentNormal sample_fragment_nml  = fragment_buffer_normal[sample_id];
 
         // Compare depths
-        float4 projected_sample = mul((float4)(sample_fragment.x, sample_fragment.y, sample_fragment.z, 1.0f), MVP_MATRIX);
+        float4 projected_sample = mul((float4)(sample_fragment_wpos.x, sample_fragment_wpos.y, sample_fragment_wpos.z, 1.0f), MVP_MATRIX);
 
         // Perspective divide
         projected_sample /= max(projected_sample.w, 0.01f);
@@ -72,11 +87,11 @@ kernel void shader_post_ssao(global Fragment* fragment_buffer, global Fragment* 
         projected_sample.y *= (float)screen_height;
 
         // Normal factor
-        float3 nmldiff = (float3)(sample_fragment.nx, sample_fragment.ny, sample_fragment.nz)-(float3)(frag.nx, frag.ny, frag.nz);
+        float3 nmldiff = (float3)(sample_fragment_nml.nx, sample_fragment_nml.ny, sample_fragment_nml.nz)-(float3)(fragNormal.nx, fragNormal.ny, fragNormal.nz);
         float nmlcheck = clamp(fabs(nmldiff.x) + fabs(nmldiff.y) + fabs(nmldiff.z), 0.25f, 1.0f);
 
         // If kernel vector depth is greated than the sampled result stored in the array, occlusion occurs. We then have to perform the range check to verify the occluding surface is nearby in world-space
-        if (projected_sample.z < projected_kernel_vector.z && length((float3)(sample_fragment.x - frag.x, sample_fragment.y - frag.y, sample_fragment.z - frag.z)) < MAX_RANGE) {
+        if (projected_sample.z < projected_kernel_vector.z && length((float3)(sample_fragment_wpos.x - fragWpos.x, sample_fragment_wpos.y - fragWpos.y, sample_fragment_wpos.z - fragWpos.z)) < MAX_RANGE) {
             sample_result += length(sample_kernel[i])*nmlcheck;
         }    
 
@@ -93,7 +108,7 @@ kernel void shader_post_ssao(global Fragment* fragment_buffer, global Fragment* 
     ssao_result.b = (int)(sample_result * 255.0f);
 
     // Write out result
-    ssao_buffer[id] = ssao_result;
+    ssao_buffer_colour[id] = ssao_result;
 
 }
 

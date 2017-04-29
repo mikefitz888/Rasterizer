@@ -17,7 +17,7 @@ __constant int _MIP_LV_OFFSETS[10] = { 0, 262144, 327680, 344064, 348160,
 
 // ---------------------------------------------- //
 // Fragment
-typedef struct __attribute__((packed, aligned(4))) {
+/*typedef struct __attribute__((packed, aligned(4))) {
     uchar r, g, b, a;
     uint triangle_id;
 
@@ -33,7 +33,31 @@ typedef struct __attribute__((packed, aligned(4))) {
     // Gradient values for texture coordinates
     float dudx, dvdx, dudy, dvdy;
 
-} Fragment;
+} Fragment;*/
+typedef struct __attribute__((packed, aligned(4))) {
+    uchar r, g, b, a;
+} FragmentColour;
+
+typedef struct __attribute__((packed, aligned(4))) {
+    uint triangle_id;
+    float va, vb, vc;
+    float depth;
+} FragmentTData;
+
+typedef struct __attribute__((packed, aligned(4))) {
+    float x, y, z;
+} FragmentWPos;
+
+typedef struct __attribute__((packed, aligned(4))) {
+    float nx, ny, nz;
+} FragmentNormal;
+
+typedef struct __attribute__((packed, aligned(4))) {
+    float uvx, uvy;
+    float dudx, dvdx, dudy, dvdy;
+} FragmentTX;
+
+
 
 // Colour
 typedef struct __attribute__((packed)) {
@@ -81,7 +105,7 @@ inline Colour texture2D_NN(global Colour* tex, float uvx, float uvy) {
     It blends the values of the pixel based on the offset ratio between the pixel
 
 */
-inline Colour texture2D_bilinear(global Colour* tex, float uvx, float uvy, Fragment frag) {
+inline Colour texture2D_bilinear(global Colour* tex, float uvx, float uvy, FragmentTX frag) {
 
     float px = sqrt(frag.dudx*frag.dudx + frag.dvdx*frag.dvdx);
     float py = sqrt(frag.dudy*frag.dudy + frag.dvdy*frag.dvdy);

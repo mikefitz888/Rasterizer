@@ -1,26 +1,30 @@
 #include "kernels/Textures/Textures.cl"
 #include "kernels/Utility/Matrix.cl"
 
-kernel void shader_point_light(global Fragment* fragment_buffer,
-                                            global Fragment* light_accum_buffer,
-                                            fvec3 campos,
-                                            fvec3 lightpos,
-                                            fvec3 lightcolour,
-                                            float light_range,
-                                            float specularity,
-                                            float glossiness,
-                                            int swidth) {
+kernel void shader_point_light( global FragmentWPos* fragment_buffer_wpos,
+                                global FragmentNormal* fragment_buffer_normal,
+                                global FragmentTData* fragment_buffer_tdata,
+                                global FragmentColour* light_accum_buffer,
+                                fvec3 campos,
+                                fvec3 lightpos,
+                                fvec3 lightcolour,
+                                float light_range,
+                                float specularity,
+                                float glossiness,
+                                int swidth) {
     
     // Fetch ID
     int x = get_global_id(0);
     int y = get_global_id(1);
 
     // Get Fragment
-    Fragment frag       = fragment_buffer[x + y*swidth];
-    Fragment frag_light = light_accum_buffer[x + y*swidth];
+    FragmentWPos   fragWpos = fragment_buffer_wpos[x + y*swidth];
+    FragmentNormal fragNml  = fragment_buffer_normal[x + y*swidth];
+    FragmentTData  fragTD   = fragment_buffer_tdata[x + y*swidth];
+    FragmentColour frag_light = light_accum_buffer[x + y*swidth];
 
     // Discard un-rendered fragments
-    if (frag.depth <= 0) {
+    if (fragTD.depth <= 0) {
         frag_light.r = 0;
         frag_light.g = 0;
         frag_light.b = 0;
@@ -30,12 +34,12 @@ kernel void shader_point_light(global Fragment* fragment_buffer,
     }
 
     // Get light dir
-    float3 lightdir = (float3)(frag.x - lightpos.x, frag.y - lightpos.y, frag.z - lightpos.z);
+    float3 lightdir = (float3)(fragWpos.x - lightpos.x, fragWpos.y - lightpos.y, fragWpos.z - lightpos.z);
     float dist = length(lightdir);
     lightdir = normalize(lightdir);
 
     // Perform lighting calculations:
-    float3 N = (float3)(frag.nx, frag.ny, frag.nz); // Surface normal [WORLD SPACE]
+    float3 N = (float3)(fragNml.nx, fragNml.ny, fragNml.nz); // Surface normal [WORLD SPACE]
     float3 L = normalize((float3)(lightdir.x, lightdir.y, lightdir.z)); // Direction of light [WORLD SPACE]
     float lambert = clamp(dot(N, L), 0.0f, 1.0f);
     float strength = clamp(1.0f - dist / light_range, 0.0f, 1.0f);

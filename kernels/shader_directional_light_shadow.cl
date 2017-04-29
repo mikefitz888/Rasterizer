@@ -11,9 +11,13 @@
 #define PCF_SAMPLES 4
 #define PCF_SAMPLE_RADIUS 1
 
-kernel void shader_directional_light_shadow(global Fragment* fragment_buffer,
-                 global Fragment* light_buffer,
-                 global Fragment* shadow_buffer,
+kernel void shader_directional_light_shadow(
+                global FragmentWPos* fragment_buffer_wpos,
+                global FragmentNormal* fragment_buffer_normal,
+                global FragmentColour* fragment_buffer_col,
+                global FragmentTData* fragment_buffer_tdata,
+                 global FragmentWPos* light_buffer_wpos,
+                 global FragmentColour* shadow_buffer_colour,
                  mat4 LIGHT_VIEW_PROJECTION_MATRIX,
                  int sb_width, 
                  int sb_height,
@@ -32,21 +36,24 @@ kernel void shader_directional_light_shadow(global Fragment* fragment_buffer,
     
     // Fetch fragment we are testing
     uint id = get_global_id(0);
-    Fragment frag = fragment_buffer[id];
-    Fragment shadow_result;
+    FragmentWPos   fragWpos = fragment_buffer_wpos[id];
+    FragmentNormal fragNml  = fragment_buffer_normal[id];
+    FragmentColour frag     = fragment_buffer_col[id];
+    FragmentTData  fragTD   = fragment_buffer_tdata[id];
+    FragmentColour shadow_result;
 
     // Discard un-rendered fragments
-    if(frag.depth <= 0) { 
+    if(fragTD.depth <= 0) {
         shadow_result.r = 0; 
         shadow_result.g = 0; 
         shadow_result.b = 0; 
         shadow_result.a = 0;
-        shadow_buffer[id] = shadow_result; 
+        shadow_buffer_colour[id] = shadow_result;
         return; 
     }
 
     // Transform fragment position into light-space
-    float4 world_pos = (float4)(frag.x, frag.y, frag.z, 1.0f);
+    float4 world_pos = (float4)(fragWpos.x, fragWpos.y, fragWpos.z, 1.0f);
     float4 light_space_proj = mul(world_pos, LIGHT_VIEW_PROJECTION_MATRIX);
     
     // Perspective divide
@@ -74,10 +81,11 @@ kernel void shader_directional_light_shadow(global Fragment* fragment_buffer,
 
             int sample_id = sample_coord.x + sample_coord.y * sb_width;
             sample_id = clamp(sample_id, 0, sb_width * sb_height - 1);
-            Fragment sample_fragment = light_buffer[sample_id];
+
+            FragmentWPos sample_fragment_wpos = light_buffer_wpos[sample_id];
 
             // Compare depths
-            float4 projected_sample = mul((float4)(sample_fragment.x, sample_fragment.y, sample_fragment.z, 1.0f), LIGHT_VIEW_PROJECTION_MATRIX);
+            float4 projected_sample = mul((float4)(sample_fragment_wpos.x, sample_fragment_wpos.y, sample_fragment_wpos.z, 1.0f), LIGHT_VIEW_PROJECTION_MATRIX);
 
             // Perspective divide
             projected_sample /= max(projected_sample.w, 0.01f);
@@ -105,7 +113,7 @@ kernel void shader_directional_light_shadow(global Fragment* fragment_buffer,
     float accum_result_f = clamp(accum_result + 0.15f, 0.0f, 1.0f); // Make shadows non black
 
     /// --- Directional lighting
-    float3 N = (float3)(frag.nx, frag.ny, frag.nz); // Surface normal [WORLD SPACE]
+    float3 N = (float3)(fragNml.nx, fragNml.ny, fragNml.nz); // Surface normal [WORLD SPACE]
     float3 L = normalize((float3)(lightdir.x, lightdir.y, lightdir.z)); // Direction of light [WORLD SPACE]
     float lambert = clamp(dot(N, L) + 0.15f, 0.15f, 1.0f);
     const float attenuation = 1.0f;
@@ -118,7 +126,7 @@ kernel void shader_directional_light_shadow(global Fragment* fragment_buffer,
 
     //// --- Specular factor ---
     // Blinn-phong
-    float3 wpos = (float3)(frag.x, frag.y, frag.z);
+    float3 wpos = (float3)(fragWpos.x, fragWpos.y, fragWpos.z);
     float3 E = normalize(wpos-(float3)(campos.x, campos.y, campos.z)); // View direction
     
 
@@ -133,5 +141,5 @@ kernel void shader_directional_light_shadow(global Fragment* fragment_buffer,
     shadow_result.a = (int)(accum_result*spec*255.0f *  (float)(frag.a/255.0f));//(int)(128.0f* accum_result);
 
     // Store result
-    shadow_buffer[id] = shadow_result;
+    shadow_buffer_colour[id] = shadow_result;
 }

@@ -165,9 +165,9 @@ int main( int argc, char* argv[] )
         RENDER::calculateSSAO(frame_buffer, ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
        
         // TEMP: Copy back lighting buffer
-        frame_buffer->transferGPUtoCPU();
-        ssao_buffer->transferGPUtoCPU();
-        shadow_buffer->transferGPUtoCPU();
+        frame_buffer->transferGPUtoCPU_Colour();
+        ssao_buffer->transferGPUtoCPU_Colour();
+        shadow_buffer->transferGPUtoCPU_Colour();
 
         clock_t e = clock();
 
@@ -180,9 +180,9 @@ int main( int argc, char* argv[] )
 #pragma omp parallel for
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
-                Pixel& p = ssao_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
-                Pixel& p2 = frame_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];
-                Pixel& p3 = shadow_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH];
+                PixelColour& p = ssao_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
+                PixelColour& p2 = frame_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];
+                PixelColour& p3 = shadow_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];
                 
                 float r, g, b;
                 r = (float)p2.r;
@@ -211,7 +211,7 @@ int main( int argc, char* argv[] )
                 //PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
                 //*a = SDL_MapRGB(screen->format, glm::clamp((int)p3.r, 0, 255), glm::clamp((int)p3.g, 0, 255), glm::clamp((int)p3.b, 0, 255));
                 // Clear
-                frame_buffer->getCPUBuffer()[x + y * SCREEN_WIDTH].depth = 0;
+                frame_buffer->getCPUBuffer_tdata()[x + y * SCREEN_WIDTH].depth = 0;
 
             }
         }

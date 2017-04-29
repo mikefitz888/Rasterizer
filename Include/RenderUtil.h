@@ -55,7 +55,7 @@ struct triplet {
 };
 
 //TODO: move these to a header file for both cpp and opencl
-struct Pixel {
+/*struct Pixel {
     //Core pixel data
     uint8_t r, g, b, a;
     uint32_t triangle_id;
@@ -70,6 +70,26 @@ struct Pixel {
     float uvx, uvy;
 
     // Gradient functions
+    float dudx, dvdx, dudy, dvdy;
+};*/
+
+// Split pixel data
+struct PixelColour {
+    uint8_t r, g, b, a;
+};
+struct PixelTData {
+    uint32_t triangle_id;
+    float va, vb, vc;
+    float depth;
+};
+struct PixelWPos {
+    float x, y, z;
+};
+struct PixelNormal {
+    float nx, ny, nz;
+};
+struct PixelTX {
+    float uvx, uvy;
     float dudx, dvdx, dudy, dvdy;
 };
 
@@ -87,19 +107,47 @@ struct AABB {
 
 class FrameBuffer {
     int width, height;
-    Pixel* cpu_buffer;
-    cl::Buffer* gpu_buffer;
+    PixelColour* cpu_buffer_colour;
+    PixelTData*  cpu_buffer_tdata;
+    PixelWPos*   cpu_buffer_wpos;
+    PixelNormal* cpu_buffer_normal;
+    PixelTX*     cpu_bufer_tx;
+
+
+    cl::Buffer* gpu_buffer_colour;
+    cl::Buffer* gpu_buffer_tdata;
+    cl::Buffer* gpu_buffer_wpos;
+    cl::Buffer* gpu_buffer_normal;
+    cl::Buffer* gpu_buffer_tx;
 
 public:
     FrameBuffer(int width, int height, const cl::Context *context);
     ~FrameBuffer();
-    Pixel* getCPUBuffer();
-    cl::Buffer* getGPUBuffer();
+
+
+    PixelColour* getCPUBuffer_colour();
+    PixelTData* getCPUBuffer_tdata();
+    PixelWPos*  getCPUBuffer_wpos();
+    PixelNormal* getCPUBuffer_normal();
+    PixelTX* getCPUBuffer_tx();
+
+    cl::Buffer* getGPUBuffer_colour();
+    cl::Buffer* getGPUBuffer_tdata();
+    cl::Buffer* getGPUBuffer_wpos();
+    cl::Buffer* getGPUBuffer_normal();
+    cl::Buffer* getGPUBuffer_tx();
+
     int getWidth();
     int getHeight();
     void saveBMP(const std::string filename);
     void clear();
-    void transferGPUtoCPU();
+    void transferGPUtoCPU_ALL();
+
+    void transferGPUtoCPU_Colour();
+    void transferGPUtoCPU_TData();
+    void transferGPUtoCPU_Wpos();
+    void transferGPUtoCPU_Normal();
+    void transferGPUtoCPU_Tx();
 };
 
 class RENDER {

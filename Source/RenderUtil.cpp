@@ -462,12 +462,12 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
 
 
                             //std::cout << "DEPTH: " << depth << std::endl;
-                            if ( (frame_buffer->getCPUBuffer()[x + y * WIDTH].depth == 0 || depth < frame_buffer->getCPUBuffer()[x + y * WIDTH].depth) && depth > znear && depth < zfar ) {
+                            if ( (frame_buffer->getCPUBuffer_tdata()[x + y * WIDTH].depth == 0 || depth < frame_buffer->getCPUBuffer_tdata()[x + y * WIDTH].depth) && depth > znear && depth < zfar ) {
                                 
                                 // Store triangle
 
 
-                                frame_buffer->getCPUBuffer()[x + y*WIDTH].triangle_id = i;
+                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].triangle_id = i;
 
                                 // Store (PERSPECTIVE CORRECT? Maybe?) barycentric interpolators
                                 /*frame_buffer[x + y*WIDTH].va = a / (s.v0.f.z*zf);
@@ -479,12 +479,12 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                                 frame_buffer[x + y*WIDTH].vb = b*zz/s.v1.f.z;
                                 frame_buffer[x + y*WIDTH].vc = c*zz/s.v2.f.z;*/
 
-                                frame_buffer->getCPUBuffer()[x + y*WIDTH].va = a;
-                                frame_buffer->getCPUBuffer()[x + y*WIDTH].vb = b;
-                                frame_buffer->getCPUBuffer()[x + y*WIDTH].vc = c;
+                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].va = a;
+                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].vb = b;
+                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].vc = c;
 
                                 // Write interpolated depth
-                                frame_buffer->getCPUBuffer()[x + y*WIDTH].depth = depth;
+                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].depth = depth;
 
                                 // Perspective correct UV:
                                 
@@ -556,27 +556,32 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
    
     /// FRAGMENT STEP ---------------------------------------- ///
     clock_t begin3 = clock();
-    kernels["fragment_main"]->setArg(0, *frame_buffer->getGPUBuffer());
-    kernels["fragment_main"]->setArg(1, *triangle_buf_alldata);
-    kernels["fragment_main"]->setArg(2, *default_tex->getGPUPtr());
-    kernels["fragment_main"]->setArg(3, *normal_map->getGPUPtr());
-    kernels["fragment_main"]->setArg(4, *specular_map->getGPUPtr());
+    kernels["fragment_main"]->setArg(0, *frame_buffer->getGPUBuffer_colour());
+    kernels["fragment_main"]->setArg(1, *frame_buffer->getGPUBuffer_tdata());
+    kernels["fragment_main"]->setArg(2, *frame_buffer->getGPUBuffer_wpos());
+    kernels["fragment_main"]->setArg(3, *frame_buffer->getGPUBuffer_normal());
+    kernels["fragment_main"]->setArg(4, *frame_buffer->getGPUBuffer_tx());
+
+    kernels["fragment_main"]->setArg(5, *triangle_buf_alldata);
+    kernels["fragment_main"]->setArg(6, *default_tex->getGPUPtr());
+    kernels["fragment_main"]->setArg(7, *normal_map->getGPUPtr());
+    kernels["fragment_main"]->setArg(8, *specular_map->getGPUPtr());
     int swi = WIDTH;
     int shi = HEIGHT;
-    kernels["fragment_main"]->setArg(5, sizeof(int), &swi);
-    kernels["fragment_main"]->setArg(6, sizeof(int), &shi);
+    kernels["fragment_main"]->setArg(9, sizeof(int), &swi);
+    kernels["fragment_main"]->setArg(10, sizeof(int), &shi);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     const cl::NDRange offseta = cl::NDRange(0);
 
-    queue->enqueueWriteBuffer(*frame_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer());
+    queue->enqueueWriteBuffer(*frame_buffer->getGPUBuffer_tdata(), CL_TRUE, 0, sizeof(PixelTData) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer_tdata());
     queue->finish();
     std::cout << "enqueuing kernel" << std::endl;
     err = queue->enqueueNDRangeKernel(*kernels["fragment_main"], offseta, screen);
     queue->finish();
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     
-    std::cout << "copying back results" << std::endl;
+    //std::cout << "copying back results" << std::endl;
     //queue->enqueueReadBuffer(*frame_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer());
     //queue->finish();
     clock_t end3 = clock();
@@ -687,16 +692,19 @@ void RENDER::calculateSSAO(FrameBuffer* in_frame_buffer, FrameBuffer* out_ssao_b
     glm::mat4 MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
 
     // Set kernel args
-    kernels["shader_post_ssao"]->setArg(0, *in_frame_buffer->getGPUBuffer());
-    kernels["shader_post_ssao"]->setArg(1, *out_ssao_buffer->getGPUBuffer());
-    kernels["shader_post_ssao"]->setArg(2, *ssao_sample_kernel);
-    kernels["shader_post_ssao"]->setArg(3, sizeof(int), &sample_count);
-    kernels["shader_post_ssao"]->setArg(4, sizeof(cl_float) * 16, glm::value_ptr(MVP_MATRIX));
+    kernels["shader_post_ssao"]->setArg(0, *in_frame_buffer->getGPUBuffer_wpos());
+    kernels["shader_post_ssao"]->setArg(1, *in_frame_buffer->getGPUBuffer_normal());
+    kernels["shader_post_ssao"]->setArg(2, *in_frame_buffer->getGPUBuffer_tdata());
+
+    kernels["shader_post_ssao"]->setArg(3, *out_ssao_buffer->getGPUBuffer_colour());
+    kernels["shader_post_ssao"]->setArg(4, *ssao_sample_kernel);
+    kernels["shader_post_ssao"]->setArg(5, sizeof(int), &sample_count);
+    kernels["shader_post_ssao"]->setArg(6, sizeof(cl_float) * 16, glm::value_ptr(MVP_MATRIX));
 
     int sw = WIDTH;
     int sh = HEIGHT;
-    kernels["shader_post_ssao"]->setArg(5, sizeof(int), &sw);
-    kernels["shader_post_ssao"]->setArg(6, sizeof(int), &sh);
+    kernels["shader_post_ssao"]->setArg(7, sizeof(int), &sw);
+    kernels["shader_post_ssao"]->setArg(8, sizeof(int), &sh);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
 
@@ -756,17 +764,21 @@ void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_ligh
     glm::mat4 LIGHT_MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
 
     // Set kernel args
-    kernels["shader_directional_light_shadow"]->setArg(0, *in_frame_buffer->getGPUBuffer());
-    kernels["shader_directional_light_shadow"]->setArg(1, *in_light_buffer->getGPUBuffer());
-    kernels["shader_directional_light_shadow"]->setArg(2, *out_shadow_buffer->getGPUBuffer());
-    kernels["shader_directional_light_shadow"]->setArg(3, sizeof(cl_float) * 16, glm::value_ptr(LIGHT_MVP_MATRIX));
+    kernels["shader_directional_light_shadow"]->setArg(0, *in_frame_buffer->getGPUBuffer_wpos());
+    kernels["shader_directional_light_shadow"]->setArg(1, *in_frame_buffer->getGPUBuffer_normal());
+    kernels["shader_directional_light_shadow"]->setArg(2, *in_frame_buffer->getGPUBuffer_colour());
+    kernels["shader_directional_light_shadow"]->setArg(3, *in_frame_buffer->getGPUBuffer_tdata());
+    
+    kernels["shader_directional_light_shadow"]->setArg(4, *in_light_buffer->getGPUBuffer_wpos());
+    kernels["shader_directional_light_shadow"]->setArg(5, *out_shadow_buffer->getGPUBuffer_colour());
+    kernels["shader_directional_light_shadow"]->setArg(6, sizeof(cl_float) * 16, glm::value_ptr(LIGHT_MVP_MATRIX));
 
     int sw = SHADOW_WIDTH;
     int sh = SHADOW_HEIGHT;
-    kernels["shader_directional_light_shadow"]->setArg(4, sizeof(int), &sw);
-    kernels["shader_directional_light_shadow"]->setArg(5, sizeof(int), &sh);
-    kernels["shader_directional_light_shadow"]->setArg(6, sizeof(cl_float)*3, &campos);
-    kernels["shader_directional_light_shadow"]->setArg(7, sizeof(cl_float)*3, &lightdir);
+    kernels["shader_directional_light_shadow"]->setArg(7, sizeof(int), &sw);
+    kernels["shader_directional_light_shadow"]->setArg(8, sizeof(int), &sh);
+    kernels["shader_directional_light_shadow"]->setArg(9, sizeof(cl_float)*3, &campos);
+    kernels["shader_directional_light_shadow"]->setArg(10, sizeof(cl_float)*3, &lightdir);
 
     
 
@@ -855,17 +867,20 @@ void RENDER::calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_
 
 
         // Set kernel args
-        kernels["shader_point_light"]->setArg(0, *in_frame_buffer->getGPUBuffer());
-        kernels["shader_point_light"]->setArg(1, *out_lighting_accum->getGPUBuffer());
-        kernels["shader_point_light"]->setArg(2, sizeof(cl_float) * 3, &campos);
-        kernels["shader_point_light"]->setArg(3, sizeof(cl_float) * 3, &lightpos);
-        kernels["shader_point_light"]->setArg(4, sizeof(cl_float) * 3, &lightcolour);
-        kernels["shader_point_light"]->setArg(5, sizeof(cl_float), &light_range);
-        kernels["shader_point_light"]->setArg(6, sizeof(cl_float), &specularity);
-        kernels["shader_point_light"]->setArg(7, sizeof(cl_float), &glossiness);
+        kernels["shader_point_light"]->setArg(0, *in_frame_buffer->getGPUBuffer_wpos());
+        kernels["shader_point_light"]->setArg(1, *in_frame_buffer->getGPUBuffer_normal());
+        kernels["shader_point_light"]->setArg(2, *in_frame_buffer->getGPUBuffer_tdata());
+
+        kernels["shader_point_light"]->setArg(3, *out_lighting_accum->getGPUBuffer_colour());
+        kernels["shader_point_light"]->setArg(4, sizeof(cl_float) * 3, &campos);
+        kernels["shader_point_light"]->setArg(5, sizeof(cl_float) * 3, &lightpos);
+        kernels["shader_point_light"]->setArg(6, sizeof(cl_float) * 3, &lightcolour);
+        kernels["shader_point_light"]->setArg(7, sizeof(cl_float), &light_range);
+        kernels["shader_point_light"]->setArg(8, sizeof(cl_float), &specularity);
+        kernels["shader_point_light"]->setArg(9, sizeof(cl_float), &glossiness);
 
         int width = in_frame_buffer->getWidth();
-        kernels["shader_point_light"]->setArg(8, sizeof(cl_int), &width);
+        kernels["shader_point_light"]->setArg(10, sizeof(cl_int), &width);
 
         const cl::NDRange screen = cl::NDRange(xmax-xmin, ymax-ymin);
         const cl::NDRange offset = cl::NDRange(xmin, ymin);
@@ -888,19 +903,72 @@ FrameBuffer::FrameBuffer(int width, int height, const cl::Context *context) {
     this->width = width;
     this->height = height;
 
-    this->cpu_buffer = new Pixel[width*height];
-    this->gpu_buffer = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * width * height);
+    this->cpu_buffer_colour = new PixelColour[width*height];
+    this->cpu_buffer_tdata  = new PixelTData[width*height];
+    this->cpu_buffer_wpos   = new PixelWPos[width*height];
+    this->cpu_buffer_normal = new PixelNormal[width*height];
+    this->cpu_bufer_tx      = new PixelTX[width*height];
+
+    this->gpu_buffer_colour = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelColour) * width * height);
+    this->gpu_buffer_tdata  = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelTData) * width * height);
+    this->gpu_buffer_wpos   = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelWPos) * width * height);
+    this->gpu_buffer_normal = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelNormal) * width * height);
+    this->gpu_buffer_tx     = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelTX) * width * height);
 }
-Pixel* FrameBuffer::getCPUBuffer() {
-    return this->cpu_buffer;
+
+PixelColour* FrameBuffer::getCPUBuffer_colour() {
+    return this->cpu_buffer_colour;
 }
-cl::Buffer* FrameBuffer::getGPUBuffer() {
-    return this->gpu_buffer;
+
+PixelTData* FrameBuffer::getCPUBuffer_tdata() {
+    return this->cpu_buffer_tdata;
+}
+
+PixelWPos*  FrameBuffer::getCPUBuffer_wpos() {
+    return this->cpu_buffer_wpos;
+}
+
+PixelNormal* FrameBuffer::getCPUBuffer_normal() {
+    return this->cpu_buffer_normal;
+}
+
+PixelTX* FrameBuffer::getCPUBuffer_tx() {
+    return this->cpu_bufer_tx;
+}
+
+cl::Buffer* FrameBuffer::getGPUBuffer_colour() {
+    return this->gpu_buffer_colour;
+}
+
+cl::Buffer* FrameBuffer::getGPUBuffer_tdata() {
+    return this->gpu_buffer_tdata;
+}
+
+cl::Buffer* FrameBuffer::getGPUBuffer_wpos() {
+    return this->gpu_buffer_wpos;
+}
+
+cl::Buffer* FrameBuffer::getGPUBuffer_normal() {
+    return this->gpu_buffer_normal;
+}
+
+
+cl::Buffer* FrameBuffer::getGPUBuffer_tx() {
+    return this->gpu_buffer_tx;
 }
 
 FrameBuffer::~FrameBuffer() {
-    delete[] this->cpu_buffer;
-    delete this->gpu_buffer;
+    delete[] this->cpu_buffer_colour;
+    delete[] this->cpu_buffer_tdata;
+    delete[] this->cpu_buffer_wpos;
+    delete[] this->cpu_buffer_normal;
+    delete[] this->cpu_bufer_tx;
+
+    delete this->gpu_buffer_colour;
+    delete this->gpu_buffer_tdata;
+    delete this->gpu_buffer_wpos;
+    delete this->gpu_buffer_normal;
+    delete this->gpu_buffer_tx;
 }
 
 int FrameBuffer::getWidth() {
@@ -915,9 +983,9 @@ void FrameBuffer::saveBMP(const std::string filename) {
     bitmap_image* bmp = new bitmap_image(this->width, this->height);
     for (int i = 0; i < this->width; i++) {
         for (int j = 0; j < this->height; j++) {
-            bmp->set_pixel(i, j, this->cpu_buffer[i + j*this->width].r, 
-                                 this->cpu_buffer[i + j*this->width].g, 
-                                 this->cpu_buffer[i + j*this->width].b);
+            bmp->set_pixel(i, j, this->cpu_buffer_colour[i + j*this->width].r,
+                                 this->cpu_buffer_colour[i + j*this->width].g,
+                                 this->cpu_buffer_colour[i + j*this->width].b);
         }
     }
     bmp->save_image(filename);
@@ -926,11 +994,31 @@ void FrameBuffer::saveBMP(const std::string filename) {
 void FrameBuffer::clear() {
     for (int i = 0; i < this->width; i++) {
         for (int j = 0; j < this->height; j++) {
-            this->cpu_buffer[i + j*this->width] = {};
+            this->cpu_buffer_colour[i + j*this->width] = {};
+            this->cpu_buffer_tdata[i + j*this->width] = {};
+            this->cpu_buffer_wpos[i + j*this->width] = {};
+            this->cpu_buffer_normal[i + j*this->width] = {};
+            this->cpu_bufer_tx[i + j*this->width] = {};
         }
     }
 }
-void FrameBuffer::transferGPUtoCPU() {
-    RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) *this->getWidth()*this->getHeight(), this->getCPUBuffer());
+void FrameBuffer::transferGPUtoCPU_Colour() {
+    RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_colour(), CL_TRUE, 0, sizeof(PixelColour) *this->getWidth()*this->getHeight(), this->getCPUBuffer_colour());
+    RENDER::queue->finish();
+}
+void FrameBuffer::transferGPUtoCPU_TData() {
+    RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_tdata(), CL_TRUE, 0, sizeof(PixelTData) *this->getWidth()*this->getHeight(), this->getCPUBuffer_tdata());
+    RENDER::queue->finish();
+}
+void FrameBuffer::transferGPUtoCPU_Wpos() {
+    RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_wpos(), CL_TRUE, 0, sizeof(PixelWPos) *this->getWidth()*this->getHeight(), this->getCPUBuffer_wpos());
+    RENDER::queue->finish();
+}
+void FrameBuffer::transferGPUtoCPU_Normal() {
+    RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_normal(), CL_TRUE, 0, sizeof(PixelNormal) *this->getWidth()*this->getHeight(), this->getCPUBuffer_normal());
+    RENDER::queue->finish();
+}
+void FrameBuffer::transferGPUtoCPU_Tx() {
+    RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_tx(), CL_TRUE, 0, sizeof(PixelTX) *this->getWidth()*this->getHeight(), this->getCPUBuffer_tx());
     RENDER::queue->finish();
 }

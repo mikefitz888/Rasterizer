@@ -498,7 +498,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                     if (a_ == 0xF && b_ == 0xF && c_ == 0xF) {
                         for (int iy = y; iy < y + q; iy++) {
                             for (int ix = x; ix < x + q; ix++) {
-                                glm::ivec2 v2 = glm::ivec2(ix, iy) - a;
+                                glm::ivec2 v2 = glm::ivec2(ix, iy) - glm::ivec2(s.v0.i.x, s.v0.i.y);
                                 float b = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
                                 float c = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
                                 float a = 1.0f - b - c;
@@ -537,7 +537,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                             int CXa = CYa, CXb = CYb, CXc = CYc;
                             for (int ix = x; ix < x + q; ix++) {
                                 if (CXa > 0 && CXb > 0 && CXc > 0) {
-                                    glm::ivec2 v2 = glm::ivec2(ix, iy) - a;
+                                    glm::ivec2 v2 = glm::ivec2(ix, iy) - glm::ivec2(s.v0.i.x, s.v0.i.y);
                                     float b = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
                                     float c = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
                                     float a = 1.0f - b - c;

@@ -331,7 +331,6 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     clock_t begin2 = clock();
 #pragma omp parallel for
     for (int i = 0; i < triangle_refs.size(); i++) {
-
         triplet s = triangles[i];
         /// Projection.cl port (CPU)---------------------------------------- ///
         /*triplet& t = triangles[i];
@@ -376,52 +375,209 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
         s.v2.f.y = proj_pos2.y;
         s.v2.f.z = -view_pos2.z;*/
         /// ---------------------------------------------------------- ///
-
         /// Rasterizer.cl port CPU)---------------------------------------- ///
         //triplet& s = triangles[i];
-        glm::ivec2 a = glm::ivec2(s.v0.i.x, s.v0.i.y);
+        /*glm::ivec2 a = glm::ivec2(s.v0.i.x, s.v0.i.y);
         glm::ivec2 b = glm::ivec2(s.v1.i.x, s.v1.i.y);
-        glm::ivec2 c = glm::ivec2(s.v2.i.x, s.v2.i.y);
+        glm::ivec2 c = glm::ivec2(s.v2.i.x, s.v2.i.y);*/
 
-        local_aabb_buff[i].a = a;
-        local_aabb_buff[i].d0 = s.v0.f.z;
+        /*local_aabb_buff[i].d0 = s.v0.f.z;
         local_aabb_buff[i].d1 = s.v1.f.z;
         local_aabb_buff[i].d2 = s.v2.f.z;
-        local_aabb_buff[i].triangle_id = i;
+        local_aabb_buff[i].triangle_id = i;*/
 
-        local_aabb_buff[i].v0 = (glm::vec2)(b - a);
-        local_aabb_buff[i].v1 = (glm::vec2)(c - a);
+        /*const auto v0 = (glm::vec2)(b - a);
+        const auto v1 = (glm::vec2)(c - a);
+        const float inv_denom = 1.f / (v0.x * v1.y - v1.x * v0.y);*/
 
-        local_aabb_buff[i].inv_denom = 1.f / (local_aabb_buff[i].v0.x * local_aabb_buff[i].v1.y - local_aabb_buff[i].v1.x * local_aabb_buff[i].v0.y);
-
-        local_aabb_buff[i].minX = glm::min(glm::min(a.x, b.x), c.x);
+        /*local_aabb_buff[i].minX = glm::min(glm::min(a.x, b.x), c.x);
         local_aabb_buff[i].minY = glm::min(glm::min(a.y, b.y), c.y);
         local_aabb_buff[i].maxX = glm::max(glm::max(a.x, b.x), c.x);
-        local_aabb_buff[i].maxY = glm::max(glm::max(a.y, b.y), c.y);
-       /* if (i == 0) {
-            printf("CPU(%d %d %d %d) \n", local_aabb_buff[i].minX, local_aabb_buff[i].minY, local_aabb_buff[i].maxX, local_aabb_buff[i].maxY);
-        }
-        */
+        local_aabb_buff[i].maxY = glm::max(glm::max(a.y, b.y), c.y);*/
+
         /// ---------------------------------------------------------- ///
         bool skip = false;
 
         // Naive depth clipping
-        if (local_aabb_buff[i].d0 <= 0.0 || local_aabb_buff[i].d1 <= 0.0 || local_aabb_buff[i].d2 <= 0.0) {
+        if (s.v0.f.z <= 0.0 || s.v1.f.z <= 0.0 || s.v2.f.z <= 0.0) {
             skip = true;
         }
         if (s.v0.f.z <= znear || s.v1.f.z <= znear || s.v2.f.z <= znear) {
             skip = true;
         }
         //if (i > 0) { skip = true; }
-        
+
         // Backface culling
         //triangle_refs[local_aabb_buff[i].triangle_id]->ComputeNormal();
-        glm::vec3 cam_to_face = triangle_refs[local_aabb_buff[i].triangle_id]->v0 - campos;
-        if (glm::dot(triangle_refs[local_aabb_buff[i].triangle_id]->normal, cam_to_face) <= 0.0f) {
+        glm::vec3 cam_to_face = triangle_refs[i]->v0 - campos;
+        if (glm::dot(triangle_refs[i]->normal, cam_to_face) <= 0.0f) {
             skip = true;
         }
-        /// AABB step CPU ---------------------------------------- ///
+
+        /// Rasterizer v2 (chunked) ---------------------------------- ///
+        /// http://forum.devmaster.net/t/advanced-rasterization/6145   ///
         if (!skip) {
+            rendered_triangle_count++;
+            glm::ivec2 a(s.v0.i.x, s.v0.i.y);
+            glm::ivec2 b(s.v1.i.x, s.v1.i.y);
+            glm::ivec2 c(s.v2.i.x, s.v2.i.y);
+            const auto v0 = (glm::vec2)(b - a);
+            const auto v1 = (glm::vec2)(c - a);
+            const float inv_denom = 1.f / (v0.x * v1.y - v1.x * v0.y);
+            a <<= 4; b <<= 4; c <<= 4;
+
+            //Delta values
+            const auto Dab(a - b);
+            const auto Dbc(b - c);
+            const auto Dca(c - a); //same as v1, can be optimized later
+
+            //Fixed-point deltas
+            const auto FDab = Dab << 4;
+            const auto FDbc = Dbc << 4;
+            const auto FDca = Dca << 4;
+
+            //Bounding box
+            int minX = glm::clamp((glm::min(a.x, glm::min(b.x, c.x)) + 0xF) >> 4, 0, WIDTH-1);
+            int maxX = glm::clamp((glm::max(a.x, glm::max(b.x, c.x)) + 0xF) >> 4, 0, WIDTH-1);
+            int minY = glm::clamp((glm::min(a.y, glm::min(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT-1);
+            int maxY = glm::clamp((glm::max(a.y, glm::max(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT-1);
+
+            //Blocksize
+            constexpr int q = 8;
+
+            //start in corner of block
+            minX &= ~(q - 1);
+            minY &= ~(q - 1);
+
+            if (minX < 0 || minX >= WIDTH) {
+                throw std::range_error("received negative value");
+            }
+
+            //Half-edge constants-ish
+            int Ca = Dab.y * a.x - Dab.x * a.y;
+            int Cb = Dbc.y * b.x - Dbc.x * b.y;
+            int Cc = Dca.y * c.x - Dca.x * c.y;
+
+            //Adjust for fill convention
+            if (Dab.y < 0 || (Dab.y == 0 && Dab.x > 0)) Ca++;
+            if (Dbc.y < 0 || (Dbc.y == 0 && Dbc.x > 0)) Cb++;
+            if (Dca.y < 0 || (Dca.y == 0 && Dca.x > 0)) Cc++;
+
+            //Iterate over chunks
+            for (int y = minY; y < maxY; y += q) {
+                for (int x = minX; x < maxX; x += q) {
+                    //Corners
+                    const int x0 = x << 4;
+                    const int x1 = (x + q - 1) << 4;
+                    const int y0 = y << 4;
+                    const int y1 = (y + q - 1) << 4;
+
+                    //Half-space functions
+                    const bool a00 = Ca + Dab.x * y0 - Dab.y * x0 > 0;
+                    const bool a10 = Ca + Dab.x * y0 - Dab.y * x1 > 0;
+                    const bool a01 = Ca + Dab.x * y1 - Dab.y * x0 > 0;
+                    const bool a11 = Ca + Dab.x * y1 - Dab.y * x1 > 0;
+                    int a_ = (a00 << 0) | (a10 << 1) | (a01 << 2) | (a11 << 3);
+
+                    const bool b00 = Cb + Dbc.x * y0 - Dbc.y * x0 > 0;
+                    const bool b10 = Cb + Dbc.x * y0 - Dbc.y * x1 > 0;
+                    const bool b01 = Cb + Dbc.x * y1 - Dbc.y * x0 > 0;
+                    const bool b11 = Cb + Dbc.x * y1 - Dbc.y * x1 > 0;
+                    int b_ = (b00 << 0) | (b10 << 1) | (b01 << 2) | (b11 << 3);
+
+                    const bool c00 = Cc + Dca.x * y0 - Dca.y * x0 > 0;
+                    const bool c10 = Cc + Dca.x * y0 - Dca.y * x1 > 0;
+                    const bool c01 = Cc + Dca.x * y1 - Dca.y * x0 > 0;
+                    const bool c11 = Cc + Dca.x * y1 - Dca.y * x1 > 0;
+                    int c_ = (c00 << 0) | (c10 << 1) | (c01 << 2) | (c11 << 3);
+
+                    //Skip block if outside triangle
+                    if (a_ == 0x0 || b_ == 0x0 || c_ == 0x0) continue;
+
+                    //Accept whole block when fully covered
+                    if (a_ == 0xF && b_ == 0xF && c_ == 0xF) {
+                        for (int iy = y; iy < y + q; iy++) {
+                            for (int ix = x; ix < x + q; ix++) {
+                                glm::ivec2 v2 = glm::ivec2(ix, iy) - a;
+                                float b = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
+                                float c = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
+                                float a = 1.0f - b - c;
+
+                                // Correct barycentric coords for perspective:
+                                float zf = a / s.v0.f.z + b / s.v1.f.z + c / s.v2.f.z;
+                                a /= (s.v0.f.z*zf);
+                                b /= (s.v1.f.z*zf);
+                                c /= (s.v2.f.z*zf);
+
+                                // Perspective-correct depth;
+                                float depth = (a*s.v0.f.z + b*s.v1.f.z + c*s.v2.f.z);
+
+                                if ((frame_buffer->getCPUBuffer_tdata()[ix + iy * WIDTH].depth == 0 || depth < frame_buffer->getCPUBuffer_tdata()[ix + iy * WIDTH].depth) && depth > znear && depth < zfar) {
+                                    // Store triangle
+                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].triangle_id = i;
+                                    // Store barycentric coordinates
+                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].va = a;
+                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].vb = b;
+                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].vc = c;
+
+                                    // Write interpolated depth
+                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].depth = depth;
+                                }
+                            }
+                        }
+
+                    }
+                    else {
+                        //Partially covered
+                        int CYa = Ca + Dab.x * y0 - Dab.y * x0;
+                        int CYb = Cb + Dbc.x * y0 - Dbc.y * x0;
+                        int CYc = Cc + Dca.x * y0 - Dca.y * x0;
+
+                        for (int iy = y; iy < y + q; iy++) {
+                            int CXa = CYa, CXb = CYb, CXc = CYc;
+                            for (int ix = x; ix < x + q; ix++) {
+                                if (CXa > 0 && CXb > 0 && CXc > 0) {
+                                    glm::ivec2 v2 = glm::ivec2(ix, iy) - a;
+                                    float b = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
+                                    float c = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
+                                    float a = 1.0f - b - c;
+
+                                    // Correct barycentric coords for perspective:
+                                    float zf = a / s.v0.f.z + b / s.v1.f.z + c / s.v2.f.z;
+                                    a /= (s.v0.f.z*zf);
+                                    b /= (s.v1.f.z*zf);
+                                    c /= (s.v2.f.z*zf);
+
+                                    // Perspective-correct depth;
+                                    float depth = (a*s.v0.f.z + b*s.v1.f.z + c*s.v2.f.z);
+
+                                    if ((frame_buffer->getCPUBuffer_tdata()[ix + iy * WIDTH].depth == 0 || depth < frame_buffer->getCPUBuffer_tdata()[ix + iy * WIDTH].depth) && depth > znear && depth < zfar) {
+                                        // Store triangle
+                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].triangle_id = i;
+                                        // Store barycentric coordinates
+                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].va = a;
+                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].vb = b;
+                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].vc = c;
+
+                                        // Write interpolated depth
+                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].depth = depth;
+                                    }
+                                }
+                                CXa -= FDab.y;
+                                CXb -= FDbc.y;
+                                CXc -= FDca.y;
+                            }
+                            CYa += FDab.x;
+                            CYb += FDbc.x;
+                            CYc += FDca.x;
+                        }
+                    }
+                }
+            }
+        }
+        
+        /// AABB step CPU ---------------------------------------- ///
+        /*if (!skip) {
             rendered_triangle_count++;
 
             // (Naive clipping) Clamp to screen region
@@ -471,14 +627,14 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                                 frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].triangle_id = i;
 
                                 // Store (PERSPECTIVE CORRECT? Maybe?) barycentric interpolators
-                                /*frame_buffer[x + y*WIDTH].va = a / (s.v0.f.z*zf);
-                                frame_buffer[x + y*WIDTH].vb = b / (s.v1.f.z*zf);
-                                frame_buffer[x + y*WIDTH].vc = c / (s.v2.f.z*zf);*/
+                                //frame_buffer[x + y*WIDTH].va = a / (s.v0.f.z*zf);
+                                //frame_buffer[x + y*WIDTH].vb = b / (s.v1.f.z*zf);
+                                //frame_buffer[x + y*WIDTH].vc = c / (s.v2.f.z*zf);
 
-                               /* float zz = 1 / (a * 1.0/s.v0.f.z + b * 1.0/s.v1.f.z + c * 1.0/s.v2.f.z);
-                                frame_buffer[x + y*WIDTH].va = a*zz/s.v0.f.z;
-                                frame_buffer[x + y*WIDTH].vb = b*zz/s.v1.f.z;
-                                frame_buffer[x + y*WIDTH].vc = c*zz/s.v2.f.z;*/
+                                //float zz = 1 / (a * 1.0/s.v0.f.z + b * 1.0/s.v1.f.z + c * 1.0/s.v2.f.z);
+                                //frame_buffer[x + y*WIDTH].va = a*zz/s.v0.f.z;
+                                //frame_buffer[x + y*WIDTH].vb = b*zz/s.v1.f.z;
+                                //frame_buffer[x + y*WIDTH].vc = c*zz/s.v2.f.z;
 
                                 frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].va = a;
                                 frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].vb = b;
@@ -489,10 +645,10 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
 
                                 // Perspective correct UV:
                                 
-                                /*float perspCorrU = (a*triangle_refs[i]->uv0.x / s.v0.f.z + b*triangle_refs[i]->uv1.x / s.v1.f.z + c*triangle_refs[i]->uv2.x / s.v2.f.z) / zf;
-                                float perspCorrV = (a*triangle_refs[i]->uv0.y / s.v0.f.z + b*triangle_refs[i]->uv1.y / s.v1.f.z + c*triangle_refs[i]->uv2.y / s.v2.f.z) / zf;
-                                frame_buffer[x + y*WIDTH].uvx = perspCorrU;
-                                frame_buffer[x + y*WIDTH].uvy = perspCorrV;*/
+                                //float perspCorrU = (a*triangle_refs[i]->uv0.x / s.v0.f.z + b*triangle_refs[i]->uv1.x / s.v1.f.z + c*triangle_refs[i]->uv2.x / s.v2.f.z) / zf;
+                                //float perspCorrV = (a*triangle_refs[i]->uv0.y / s.v0.f.z + b*triangle_refs[i]->uv1.y / s.v1.f.z + c*triangle_refs[i]->uv2.y / s.v2.f.z) / zf;
+                                //frame_buffer[x + y*WIDTH].uvx = perspCorrU;
+                                //frame_buffer[x + y*WIDTH].uvy = perspCorrV;
 
                                 // TEMP texture test:
 
@@ -502,7 +658,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
 
                 }
             }
-        }
+        }*/
         /// ---------------------------------------------------------- ///
     }
     clock_t end2 = clock();

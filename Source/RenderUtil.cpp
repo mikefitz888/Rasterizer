@@ -415,22 +415,22 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
             skip = true;
         }
 
-        /// Rasterizer v2 (chunked) ---------------------------------- ///
+        /// Rasterizer v2 (Half-space, chunked) ---------------------- ///
         /// http://forum.devmaster.net/t/advanced-rasterization/6145   ///
         if (!skip) {
             rendered_triangle_count++;
             glm::ivec2 a(s.v0.i.x, s.v0.i.y);
             glm::ivec2 b(s.v1.i.x, s.v1.i.y);
             glm::ivec2 c(s.v2.i.x, s.v2.i.y);
-            const auto v0 = (glm::vec2)(b - a);
-            const auto v1 = (glm::vec2)(c - a);
+            const auto v0 = (b - a);
+            const auto v1 = (c - a);
             const float inv_denom = 1.f / (v0.x * v1.y - v1.x * v0.y);
             a <<= 4; b <<= 4; c <<= 4;
 
             //Delta values
             const auto Dab(a - b);
             const auto Dbc(b - c);
-            const auto Dca(c - a); //same as v1, can be optimized later
+            const auto Dca = v1; //gonna trust the compiler to do the right thing here
 
             //Fixed-point deltas
             const auto FDab = Dab << 4;
@@ -443,16 +443,12 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
             int minY = glm::clamp((glm::min(a.y, glm::min(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT-1);
             int maxY = glm::clamp((glm::max(a.y, glm::max(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT-1);
 
-            //Blocksize
-            constexpr int q = 8;
+            //Blocksize (must be 2^n)
+            constexpr int q = 16;
 
             //start in corner of block
             minX &= ~(q - 1);
             minY &= ~(q - 1);
-
-            if (minX < 0 || minX >= WIDTH) {
-                throw std::range_error("received negative value");
-            }
 
             //Half-edge constants-ish
             int Ca = Dab.y * a.x - Dab.x * a.y;
@@ -466,6 +462,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
 
             //Iterate over chunks
             for (int y = minY; y < maxY; y += q) {
+                bool complete = false;
                 for (int x = minX; x < maxX; x += q) {
                     //Corners
                     const int x0 = x << 4;
@@ -493,7 +490,11 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                     int c_ = (c00 << 0) | (c10 << 1) | (c01 << 2) | (c11 << 3);
 
                     //Skip block if outside triangle
-                    if (a_ == 0x0 || b_ == 0x0 || c_ == 0x0) continue;
+                    if (a_ == 0x0 || b_ == 0x0 || c_ == 0x0) { 
+                        if (complete) x = maxX; //The remainder of the chunks are non-covered
+                        continue; 
+                    }
+                    complete = true; //The next non-covered chunk will signal the rest are non-covered
 
                     //Accept whole block when fully covered
                     if (a_ == 0xF && b_ == 0xF && c_ == 0xF) {
@@ -513,16 +514,17 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                                 // Perspective-correct depth;
                                 float depth = (a*s.v0.f.z + b*s.v1.f.z + c*s.v2.f.z);
 
-                                if ((frame_buffer->getCPUBuffer_tdata()[ix + iy * WIDTH].depth == 0 || depth < frame_buffer->getCPUBuffer_tdata()[ix + iy * WIDTH].depth) && depth > znear && depth < zfar) {
+                                const auto tdata = frame_buffer->getCPUBuffer_tdata() + ix + iy * WIDTH;
+                                if ((tdata->depth == 0 || depth < tdata->depth) && depth > znear && depth < zfar) {
                                     // Store triangle
-                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].triangle_id = i;
+                                    tdata->triangle_id = i;
                                     // Store barycentric coordinates
-                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].va = a;
-                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].vb = b;
-                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].vc = c;
+                                    tdata->va = a;
+                                    tdata->vb = b;
+                                    tdata->vc = c;
 
                                     // Write interpolated depth
-                                    frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].depth = depth;
+                                    tdata->depth = depth;
                                 }
                             }
                         }
@@ -552,16 +554,17 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                                     // Perspective-correct depth;
                                     float depth = (a*s.v0.f.z + b*s.v1.f.z + c*s.v2.f.z);
 
-                                    if ((frame_buffer->getCPUBuffer_tdata()[ix + iy * WIDTH].depth == 0 || depth < frame_buffer->getCPUBuffer_tdata()[ix + iy * WIDTH].depth) && depth > znear && depth < zfar) {
+                                    const auto tdata = frame_buffer->getCPUBuffer_tdata() + ix + iy * WIDTH;
+                                    if ((tdata->depth == 0 || depth < tdata->depth) && depth > znear && depth < zfar) {
                                         // Store triangle
-                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].triangle_id = i;
+                                        tdata->triangle_id = i;
                                         // Store barycentric coordinates
-                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].va = a;
-                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].vb = b;
-                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].vc = c;
+                                        tdata->va = a;
+                                        tdata->vb = b;
+                                        tdata->vc = c;
 
                                         // Write interpolated depth
-                                        frame_buffer->getCPUBuffer_tdata()[ix + iy*WIDTH].depth = depth;
+                                        tdata->depth = depth;
                                     }
                                 }
                                 CXa -= FDab.y;

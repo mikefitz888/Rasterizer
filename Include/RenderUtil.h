@@ -1,6 +1,6 @@
 #ifndef RENDER_UTIL_H
 #define RENDER_UTIL_H
-
+#define VERBOSE false
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.hpp>
 #include <map>

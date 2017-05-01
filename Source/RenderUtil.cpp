@@ -292,7 +292,8 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     kernels["projection"]->setArg(6, sizeof(float), &sh);
 
     unsigned int number_of_triangles = triangle_refs.size();
-    std::cout << "NUMBER OF TRIANGLES: " << number_of_triangles << std::endl;
+
+    if(VERBOSE) std::cout << "NUMBER OF TRIANGLES: " << number_of_triangles << std::endl;
 
     //Converts world space triangles to screen space
     //The z value of each "2D" triangle is used to retain the depth information from world space (not correctly implemented yet)
@@ -312,7 +313,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     queue->finish();
     clock_t end = clock();
     double elapsed_secs = 1000*double(end - begin) / CLOCKS_PER_SEC;
-    std::cout << "Projection stage: " << elapsed_secs << "ms" << std::endl;
+    if(VERBOSE) std::cout << "Projection stage: " << elapsed_secs << "ms" << std::endl;
     ///---------------------------------------------------------------------------------------------------------------------//
 
     /// AABB STAGE (GPU) ---------------------------------------------------------------------------------------------------//
@@ -663,7 +664,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     }
     clock_t end2 = clock();
     elapsed_secs = 1000 * double(end2 - begin2) / CLOCKS_PER_SEC;
-    std::cout << "AABB+raster stage: " << elapsed_secs << "ms" << std::endl;
+    if(VERBOSE) std::cout << "AABB+raster stage: " << elapsed_secs << "ms" << std::endl;
     
 
 
@@ -733,7 +734,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
 
     queue->enqueueWriteBuffer(*frame_buffer->getGPUBuffer_tdata(), CL_TRUE, 0, sizeof(PixelTData) * HEIGHT * WIDTH, frame_buffer->getCPUBuffer_tdata());
     queue->finish();
-    std::cout << "enqueuing kernel" << std::endl;
+    if(VERBOSE) std::cout << "enqueuing kernel" << std::endl;
     err = queue->enqueueNDRangeKernel(*kernels["fragment_main"], offseta, screen);
     queue->finish();
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
@@ -743,12 +744,14 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     //queue->finish();
     clock_t end3 = clock();
     elapsed_secs = 1000 * double(end3 - begin3) / CLOCKS_PER_SEC;
-    std::cout << "Fragment: " << elapsed_secs << "ms" << std::endl;
-    std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
-    /// ---------------------------------------------------------- ///
+    if (VERBOSE) {
+        std::cout << "Fragment: " << elapsed_secs << "ms" << std::endl;
+        std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
 
-    std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
-    
+        /// ---------------------------------------------------------- ///
+
+        std::cout << "Triangles Rendered: " << rendered_triangle_count << std::endl;
+    }
 
 
     //TODO: generate fragments, maybe cpu is best for this, gpus normally do it in hardware
@@ -1010,7 +1013,7 @@ void RENDER::calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_
             ymax = glm::max(ymax, (int)light_screenspace.y);
         //}
     }
-    std::cout << "Light (" << xmin << "," << ymin << ") to (" << xmax << "," << ymax << ")" << std::endl;
+    if(VERBOSE) std::cout << "Light (" << xmin << "," << ymin << ") to (" << xmax << "," << ymax << ")" << std::endl;
     xmin = glm::clamp(xmin, 0, in_frame_buffer->getWidth()-1);
     ymin = glm::clamp(ymin, 0, in_frame_buffer->getHeight()-1);
     xmax = glm::clamp(xmax, 0, in_frame_buffer->getWidth()-1);

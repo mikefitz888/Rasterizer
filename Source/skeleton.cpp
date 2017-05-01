@@ -176,7 +176,7 @@ int main( int argc, char* argv[] )
         clock_t e = clock();
 
         double elapsed_secs = 1000 * double(e - b) / CLOCKS_PER_SEC;
-        std::cout << "FULL FRAME RASTER: " << elapsed_secs << "ms" << std::endl;
+        if(VERBOSE) std::cout << "FULL FRAME RASTER: " << elapsed_secs << "ms" << std::endl;
         
         
         if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
@@ -360,8 +360,13 @@ void Update()
 	int t2 = SDL_GetTicks();
 	float dt = float(t2-t);
 	t = t2;
-	cout << "Render time: " << dt << " ms." << endl;
-    std::cout << "-------------------------------------------" << std::endl;
+    if (VERBOSE) {
+        cout << "Render time: " << dt << " ms." << endl;
+        std::cout << "-------------------------------------------" << std::endl;
+    }
+    else {
+        cout << "Render time: " << dt << " ms.          \r";
+    }
 }
 
 void Draw(model::Scene& scene)

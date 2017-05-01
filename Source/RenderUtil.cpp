@@ -333,70 +333,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
 #pragma omp parallel for
     for (int i = 0; i < triangle_refs.size(); i++) {
         triplet s = triangles[i];
-        /// Projection.cl port (CPU)---------------------------------------- ///
-        /*triplet& t = triangles[i];
 
-        // World pos
-        glm::vec4 world_pos_0(triangle_refs[i]->v0.x, triangle_refs[i]->v0.y, triangle_refs[i]->v0.z, 1);
-        glm::vec4 world_pos_1(triangle_refs[i]->v1.x, triangle_refs[i]->v1.y, triangle_refs[i]->v1.z, 1);
-        glm::vec4 world_pos_2(triangle_refs[i]->v2.x, triangle_refs[i]->v2.y, triangle_refs[i]->v2.z, 1);
-
-        // Transform to view position
-        glm::vec4 view_pos0, view_pos1, view_pos2;
-        view_pos0 = VIEW_MATRIX*world_pos_0;
-        view_pos1 = VIEW_MATRIX*world_pos_1;
-        view_pos2 = VIEW_MATRIX*world_pos_2;
-
-        // Projection
-        glm::vec4 proj_pos0, proj_pos1, proj_pos2;
-        proj_pos0 = PROJECTION_MATRIX*view_pos0;
-        proj_pos1 = PROJECTION_MATRIX*view_pos1;
-        proj_pos2 = PROJECTION_MATRIX*view_pos2;
-
-        // PERSPECTIVE DIVIDE
-        proj_pos0 /= proj_pos0.w;
-        proj_pos1 /= proj_pos1.w;
-        proj_pos2 /= proj_pos2.w;
-
-        // Clipping
-        proj_pos0 = CLIP_MATRIX*proj_pos0;
-        proj_pos1 = CLIP_MATRIX*proj_pos1;
-        proj_pos2 = CLIP_MATRIX*proj_pos2;
-
-        // Collect result
-        s.v0.f.x = proj_pos0.x; 
-        s.v0.f.y = proj_pos0.y;
-        s.v0.f.z = -view_pos0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
-
-        s.v1.f.x = proj_pos1.x;
-        s.v1.f.y = proj_pos1.y;
-        s.v1.f.z = -view_pos1.z;
-
-        s.v2.f.x = proj_pos2.x;
-        s.v2.f.y = proj_pos2.y;
-        s.v2.f.z = -view_pos2.z;*/
-        /// ---------------------------------------------------------- ///
-        /// Rasterizer.cl port CPU)---------------------------------------- ///
-        //triplet& s = triangles[i];
-        /*glm::ivec2 a = glm::ivec2(s.v0.i.x, s.v0.i.y);
-        glm::ivec2 b = glm::ivec2(s.v1.i.x, s.v1.i.y);
-        glm::ivec2 c = glm::ivec2(s.v2.i.x, s.v2.i.y);*/
-
-        /*local_aabb_buff[i].d0 = s.v0.f.z;
-        local_aabb_buff[i].d1 = s.v1.f.z;
-        local_aabb_buff[i].d2 = s.v2.f.z;
-        local_aabb_buff[i].triangle_id = i;*/
-
-        /*const auto v0 = (glm::vec2)(b - a);
-        const auto v1 = (glm::vec2)(c - a);
-        const float inv_denom = 1.f / (v0.x * v1.y - v1.x * v0.y);*/
-
-        /*local_aabb_buff[i].minX = glm::min(glm::min(a.x, b.x), c.x);
-        local_aabb_buff[i].minY = glm::min(glm::min(a.y, b.y), c.y);
-        local_aabb_buff[i].maxX = glm::max(glm::max(a.x, b.x), c.x);
-        local_aabb_buff[i].maxY = glm::max(glm::max(a.y, b.y), c.y);*/
-
-        /// ---------------------------------------------------------- ///
         bool skip = false;
 
         // Naive depth clipping
@@ -406,10 +343,8 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
         if (s.v0.f.z <= znear || s.v1.f.z <= znear || s.v2.f.z <= znear) {
             skip = true;
         }
-        //if (i > 0) { skip = true; }
 
         // Backface culling
-        //triangle_refs[local_aabb_buff[i].triangle_id]->ComputeNormal();
         glm::vec3 cam_to_face = triangle_refs[i]->v0 - campos;
         if (glm::dot(triangle_refs[i]->normal, cam_to_face) <= 0.0f) {
             skip = true;
@@ -444,7 +379,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
             int maxY = glm::clamp((glm::max(a.y, glm::max(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT-1);
 
             //Blocksize (must be 2^n)
-            constexpr int q = 16;
+            constexpr int q = 8;
 
             //start in corner of block
             minX &= ~(q - 1);
@@ -501,6 +436,7 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                         for (int iy = y; iy < y + q; iy++) {
                             for (int ix = x; ix < x + q; ix++) {
                                 glm::ivec2 v2 = glm::ivec2(ix, iy) - glm::ivec2(s.v0.i.x, s.v0.i.y);
+
                                 float b = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
                                 float c = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
                                 float a = 1.0f - b - c;
@@ -528,7 +464,6 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                                 }
                             }
                         }
-
                     }
                     else {
                         //Partially covered
@@ -578,142 +513,14 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                     }
                 }
             }
-        }
-        
-        /// AABB step CPU ---------------------------------------- ///
-        /*if (!skip) {
-            rendered_triangle_count++;
-
-            // (Naive clipping) Clamp to screen region
-            int minX = glm::clamp(local_aabb_buff[i].minX, 0, WIDTH -1);
-            int minY = glm::clamp(local_aabb_buff[i].minY, 0, HEIGHT-1);
-            int maxX = glm::clamp(local_aabb_buff[i].maxX, 0, WIDTH -1);
-            int maxY = glm::clamp(local_aabb_buff[i].maxY, 0, HEIGHT-1);
-
-            //if (i == 0) {
-            //    std::cout << "W: " << s.v0.f.w << std::endl;
-            //}
-
-            for (int x = minX; x <= maxX; x++) {
-                for (int y = minY; y <= maxY; y++) {
-
-                   // if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-                        glm::ivec2 v2 = glm::ivec2(x, y) - local_aabb_buff[i].a;
-                        glm::ivec2 v0 = local_aabb_buff[i].v0;
-                        glm::ivec2 v1 = local_aabb_buff[i].v1;
-
-                        float b = (v2.x * v1.y - v1.x * v2.y) * local_aabb_buff[i].inv_denom;
-                        float c = (v0.x * v2.y - v2.x * v0.y) * local_aabb_buff[i].inv_denom;
-                        float a = 1.0f - b - c;
-
-
-
-
-                        if ((a <= 1 && b <= 1 && c <= 1 && a >= 0 && b >= 0 && c >= 0)) {
-
-                            // Correct barycentric coords for perspective:
-                            float zf = a / s.v0.f.z + b / s.v1.f.z + c / s.v2.f.z;
-                            a /= (s.v0.f.z*zf);
-                            b /= (s.v1.f.z*zf);
-                            c /= (s.v2.f.z*zf);
-
-                            // Perspective-correct depth;
-                            
-                            float depth = (a*local_aabb_buff[i].d0 + b*local_aabb_buff[i].d1  + c*local_aabb_buff[i].d2 );
-
-
-                            //std::cout << "DEPTH: " << depth << std::endl;
-                            if ( (frame_buffer->getCPUBuffer_tdata()[x + y * WIDTH].depth == 0 || depth < frame_buffer->getCPUBuffer_tdata()[x + y * WIDTH].depth) && depth > znear && depth < zfar ) {
-                                
-                                // Store triangle
-
-
-                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].triangle_id = i;
-
-                                // Store (PERSPECTIVE CORRECT? Maybe?) barycentric interpolators
-                                //frame_buffer[x + y*WIDTH].va = a / (s.v0.f.z*zf);
-                                //frame_buffer[x + y*WIDTH].vb = b / (s.v1.f.z*zf);
-                                //frame_buffer[x + y*WIDTH].vc = c / (s.v2.f.z*zf);
-
-                                //float zz = 1 / (a * 1.0/s.v0.f.z + b * 1.0/s.v1.f.z + c * 1.0/s.v2.f.z);
-                                //frame_buffer[x + y*WIDTH].va = a*zz/s.v0.f.z;
-                                //frame_buffer[x + y*WIDTH].vb = b*zz/s.v1.f.z;
-                                //frame_buffer[x + y*WIDTH].vc = c*zz/s.v2.f.z;
-
-                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].va = a;
-                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].vb = b;
-                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].vc = c;
-
-                                // Write interpolated depth
-                                frame_buffer->getCPUBuffer_tdata()[x + y*WIDTH].depth = depth;
-
-                                // Perspective correct UV:
-                                
-                                //float perspCorrU = (a*triangle_refs[i]->uv0.x / s.v0.f.z + b*triangle_refs[i]->uv1.x / s.v1.f.z + c*triangle_refs[i]->uv2.x / s.v2.f.z) / zf;
-                                //float perspCorrV = (a*triangle_refs[i]->uv0.y / s.v0.f.z + b*triangle_refs[i]->uv1.y / s.v1.f.z + c*triangle_refs[i]->uv2.y / s.v2.f.z) / zf;
-                                //frame_buffer[x + y*WIDTH].uvx = perspCorrU;
-                                //frame_buffer[x + y*WIDTH].uvy = perspCorrV;
-
-                                // TEMP texture test:
-
-                            }
-                        }
-                   // }
-
-                }
-            }
-        }*/
-        /// ---------------------------------------------------------- ///
+        }   
     }
+
+    /// ---------------------------------------------------------- ///
+
     clock_t end2 = clock();
     elapsed_secs = 1000 * double(end2 - begin2) / CLOCKS_PER_SEC;
     if(VERBOSE) std::cout << "AABB+raster stage: " << elapsed_secs << "ms" << std::endl;
-    
-
-
-    /// Fragment Step (CPU)  ---------------------------------------- ///
-    /// - Ideally this should be done on the GPU, but that requires the triangle_refs[] array
-    /// - This is currently done here to ensure it is only run atmost once per pixel. (vs the above which could run many times per pixel)
-/*#pragma omp parallel for
-    for (int x = 0; x < SCREEN_WIDTH; x++) {
-        for (int y = 0; y < SCREEN_HEIGHT; y++) {
-
-            if (frame_buffer[x + y*SCREEN_WIDTH].depth > 0) {
-
-                // Get info
-                int i = frame_buffer[x + y*SCREEN_WIDTH].triangle_id;
-                float u = frame_buffer[x + y*SCREEN_WIDTH].va;
-                float v = frame_buffer[x + y*SCREEN_WIDTH].vb;
-                float w = frame_buffer[x + y*SCREEN_WIDTH].vc;
-
-                // Get TX coord
-                float tx = triangle_refs[i]->uv0.x*u + triangle_refs[i]->uv1.x*v + triangle_refs[i]->uv2.x*w;
-                float ty = triangle_refs[i]->uv0.y*u + triangle_refs[i]->uv1.y*v + triangle_refs[i]->uv2.y*w;
-                frame_buffer[x + y*SCREEN_WIDTH].uvx = tx;
-                frame_buffer[x + y*SCREEN_WIDTH].uvx = ty;
-
-                // Get interpolated Normal
-                float nx = -(triangle_refs[i]->n0.x*u + triangle_refs[i]->n1.x*v + triangle_refs[i]->n2.x*w);
-                float ny = -(triangle_refs[i]->n0.y*u + triangle_refs[i]->n1.y*v + triangle_refs[i]->n2.y*w);
-                float nz = -(triangle_refs[i]->n0.z*u + triangle_refs[i]->n1.z*v + triangle_refs[i]->n2.z*w);
-                frame_buffer[x + y*SCREEN_WIDTH].nx = nx;
-                frame_buffer[x + y*SCREEN_WIDTH].ny = ny;
-                frame_buffer[x + y*SCREEN_WIDTH].nz = nz;
-
-                // Get interpolated position
-                glm::vec3 pos = u*triangle_refs[i]->v0 + v*triangle_refs[i]->v1 + w*triangle_refs[i]->v2;
-                frame_buffer[x + y*SCREEN_WIDTH].x = pos.x;
-                frame_buffer[x + y*SCREEN_WIDTH].y = pos.y;
-                frame_buffer[x + y*SCREEN_WIDTH].z = pos.z;
-
-
-                frame_buffer[x + y*SCREEN_WIDTH].r = 255 * (frame_buffer[x + y*SCREEN_WIDTH].nx*0.5 + 0.5);
-                frame_buffer[x + y*SCREEN_WIDTH].g = 255 * (frame_buffer[x + y*SCREEN_WIDTH].ny*0.5 + 0.5);
-                frame_buffer[x + y*SCREEN_WIDTH].b = 255 * (frame_buffer[x + y*SCREEN_WIDTH].nz*0.5 + 0.5);
-            }
-        }
-    }*/
-    /// ---------------------------------------------------------- ///
    
     /// FRAGMENT STEP ---------------------------------------- ///
     clock_t begin3 = clock();

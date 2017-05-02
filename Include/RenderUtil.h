@@ -94,7 +94,32 @@ struct PixelTX {
 };
 
 struct Material {
+    // Textures
+    Texture* diffuse_texture;
+    Texture* normalmap_texture;
+    Texture* specular_texture;
+
+    // Material properties
+    float specularity = 0.0f;
+    float glossiness = 0.0f;
+    float reflectivity = 0.0f;
     float r, g, b, a;
+};
+
+struct GPUMaterial {
+
+    // Material textures
+    cl::Buffer* diffuse_texture;
+    cl::Buffer* normalmap_texture;
+    cl::Buffer* specular_texture;
+
+    // Material properties
+    float specularity = 0.0f;
+    float glossiness = 0.0f;
+    float reflectivity = 0.0f;
+
+    // GPU Material
+    GPUMaterial* gpu_material;
 };
 
 struct AABB {

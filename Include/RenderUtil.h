@@ -93,18 +93,6 @@ struct PixelTX {
     float dudx, dvdx, dudy, dvdy;
 };
 
-struct Material {
-    // Textures
-    Texture* diffuse_texture;
-    Texture* normalmap_texture;
-    Texture* specular_texture;
-
-    // Material properties
-    float specularity = 0.0f;
-    float glossiness = 0.0f;
-    float reflectivity = 0.0f;
-    float r, g, b, a;
-};
 
 struct GPUMaterial {
 
@@ -117,10 +105,33 @@ struct GPUMaterial {
     float specularity = 0.0f;
     float glossiness = 0.0f;
     float reflectivity = 0.0f;
-
-    // GPU Material
-    GPUMaterial* gpu_material;
+    float r, g, b;
 };
+
+struct Material {
+    // Textures
+    Texture* diffuse_texture;
+    Texture* normalmap_texture;
+    Texture* specular_texture;
+
+    // Material properties
+    float specularity = 0.0f;
+    float glossiness = 0.0f;
+    float reflectivity = 0.0f;
+    float r, g, b;
+
+    // GPU Material 
+    GPUMaterial gpumaterial;
+
+    // Functions
+    Material(Texture* diffuse_texture, Texture* normalmap_texture, Texture* specular_texture,
+             float specularity, float glossiness, float reflectivity, float r, float g, float b );
+
+private:
+    void prepareGPUMaterial();
+
+};
+
 
 struct AABB {
     int minX, minY, maxX, maxY;

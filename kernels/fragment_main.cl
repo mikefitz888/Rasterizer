@@ -24,6 +24,9 @@ typedef struct __attribute__((packed)) {
     vec3 color;
     float transparency;
 
+    // Material
+    int material_id;
+
 } Triangle;
 
 

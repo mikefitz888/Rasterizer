@@ -4,7 +4,6 @@
 cl::Buffer* RENDER::triangle_buff;
 cl::Buffer* RENDER::triangle_buf_alldata;
 cl::Buffer* RENDER::screen_space_buff;
-cl::Buffer* RENDER::material_buffer;
 cl::Buffer* RENDER::aabb_buffer;
 
 cl::Buffer* RENDER::ssao_sample_kernel;
@@ -13,7 +12,6 @@ glm::vec3* RENDER::ssao_sample_kernel_vals;
 
 std::vector<Triangle*> RENDER::triangle_refs;
 triplet* RENDER::triangles;
-Material* RENDER::materials;
 AABB* RENDER::local_aabb_buff;
 
 cl::Device* RENDER::device;
@@ -163,16 +161,11 @@ void RENDER::createOCLCommandQueue() {
 
 void RENDER::allocateOCLBuffers() {
     //TODO: move these to a map for better organisation
-    //frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(triplet) * triangle_refs.size());
     triangle_buf_alldata = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Triangle) * triangle_refs.size());
 
     screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(triplet) * triangle_refs.size());
-    material_buffer = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Material) * triangle_refs.size());
     aabb_buffer = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(AABB) * triangle_refs.size());
-
-    // SSAO
-    //ssao_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     
     // LOAD TEXTURES:
     //std::string str = "Resource/T1.bmp";
@@ -184,14 +177,10 @@ void RENDER::allocateOCLBuffers() {
 void RENDER::writeTriangles() {
     //May need to modify this to do transfer in multiple steps if memory requirement is too high
     triangles = new triplet[triangle_refs.size()];
-    materials = new Material[triangle_refs.size()];
-    //printf("SIZE = %d\n", triangle_refs.size());
+
     
     for (int i = 0; i < triangle_refs.size(); i++) {
         auto& t = triangle_refs[i];
-        materials[i].r = t->color.r;
-        materials[i].g = t->color.g;
-        materials[i].b = t->color.b;
 
         triangles[i].v0.f = glm::vec4(t->v0.x, t->v0.y, t->v0.z, 1.0f);
         triangles[i].v1.f = glm::vec4(t->v1.x, t->v1.y, t->v1.z, 1.0f);
@@ -215,8 +204,6 @@ void RENDER::writeTriangles() {
         triangles_FULL[i] = *triangle_refs[i];
     }
     err = queue->enqueueWriteBuffer(*triangle_buf_alldata, CL_TRUE, 0, sizeof(Triangle) * triangle_refs.size(), triangles_FULL);
-
-    err = queue->enqueueWriteBuffer(*material_buffer, CL_TRUE, 0, sizeof(Material) * triangle_refs.size(), materials);
     if (err != 0) {
         printf("ERROR %d %d\n", __LINE__, err);
         while (1);
@@ -634,8 +621,8 @@ void RENDER::release() {
     triangle_refs.clear();
 
     delete[] triangles;
-    delete[] materials;
-    delete material_buffer;
+    //delete[] materials;
+    //delete material_buffer;
     //delete frame_buff;
     //delete ssao_buff;
     delete ssao_sample_kernel;
@@ -757,9 +744,6 @@ void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_ligh
     cl_int err = queue->enqueueNDRangeKernel(*kernels["shader_directional_light_shadow"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     queue->finish();
-
-    //queue->enqueueReadBuffer(*out_shadow_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * CAMERA_WIDTH * CAMERA_HEIGHT, out_shadow_buffer->getCPUBuffer());
-    //queue->finish();
 }
 
 // Point lights (Deferred)
@@ -1005,4 +989,37 @@ void FrameBuffer::transferGPUtoCPU_Normal() {
 void FrameBuffer::transferGPUtoCPU_Tx() {
     RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_tx(), CL_TRUE, 0, sizeof(PixelTX) *this->getWidth()*this->getHeight(), this->getCPUBuffer_tx());
     RENDER::queue->finish();
+}
+
+// Materials
+Material::Material(Texture* diffuse_texture, Texture* normalmap_texture, Texture* specular_texture,
+         float specularity, float glossiness, float reflectivity, float r = 255.0f, float g = 255.0f, float b = 255.0f) {
+   
+    // Textures
+    this->diffuse_texture = diffuse_texture;
+    this->specular_texture = specular_texture;
+    this->normalmap_texture = normalmap_texture;
+    
+    // Properties
+    this->specularity = specularity;
+    this->glossiness = glossiness;
+    this->reflectivity = reflectivity;
+    this->r = r;
+    this->g = g;
+    this->b = b;
+
+    // Prepare GPU Material
+    prepareGPUMaterial();
+}
+
+void Material::prepareGPUMaterial() {
+    this->gpumaterial.diffuse_texture   = this->diffuse_texture->getGPUPtr();
+    this->gpumaterial.specular_texture  = this->specular_texture->getGPUPtr();
+    this->gpumaterial.normalmap_texture = this->normalmap_texture->getGPUPtr();
+    this->gpumaterial.specularity       = this->specularity;
+    this->gpumaterial.glossiness        = this->glossiness;
+    this->gpumaterial.reflectivity      = this->reflectivity;
+    this->gpumaterial.r = this->r;
+    this->gpumaterial.g = this->g;
+    this->gpumaterial.b = this->b;
 }

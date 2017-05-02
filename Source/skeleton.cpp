@@ -103,7 +103,7 @@ int main( int argc, char* argv[] )
    // FrameBuffer* lighting_buffer = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
 
     // Generate SSAO Kernel
-    int sample_count = 128;
+    int sample_count = 96;
     RENDER::buildSSAOSampleKernel(sample_count);
 
     // Generate a buffer to store lighting in

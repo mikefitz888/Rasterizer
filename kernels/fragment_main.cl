@@ -106,7 +106,7 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     //      - as thats all that is needed by neighbouring cells.
     //fragment_buffer_col[id] = fragCol;
     //fragment_buffer_tdata[id] = fragTdata;
-    //fragment_buffer_wpos[id] = fragWpos;
+    fragment_buffer_wpos[id] = fragWpos;
     //fragment_buffer_normal[id] = fragNml;
     fragment_buffer_tex[id] = fragTX;
 
@@ -162,7 +162,7 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
                              ((float)norm_col.g / 255.0f)*2.0f - 1.0f,
                              ((float)norm_col.b / 255.0f)*2.0f - 1.0f);
     
-    float f = 1.0f / (/*deltaUV1.x*/dudx * /*deltaUV2.y*/dvdy - /*deltaUV2.x*/dvdx * /*deltaUV1.y*/dudy);
+    /*float f = 1.0f / (dudx * dvdy - dvdx * dudy);
     
     float3 edge1, edge2;
     edge1 = (float3)(t.v1.x, t.v1.y, t.v1.z) - (float3)(t.v0.x, t.v0.y, t.v0.z);
@@ -192,7 +192,54 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     TBN.m21 = fragNml.ny;
     TBN.m22 = fragNml.nz;
 
+    normal_t = normalize(mul3(normal_t, TBN));*/
+
+    // Perform Normal Perturbation
+    FragmentWPos frag_left_w = fragment_buffer_wpos[clamp((int)id - 1, (int)0, (int)(screen_width * screen_height - 1))];
+    FragmentWPos frag_up_w = fragment_buffer_wpos[clamp((int)id - (int)screen_width, (int)0, (int)(screen_width*screen_height - 1))];
+    float dxdx = fragWpos.x - frag_left_w.x;
+    float dydx = fragWpos.y - frag_left_w.y;
+    float dzdx = fragWpos.z - frag_left_w.z;
+
+    float dxdy = fragWpos.x - frag_up_w.x;
+    float dydy = fragWpos.y - frag_up_w.y;
+    float dzdy = fragWpos.z - frag_up_w.z;
+
+    float3 dp1 = (float3)(dxdx, dydx, dzdx);
+    float3 dp2 = (float3)(dxdy, dydy, dzdy);
+    float2 duv1 = (float2)(dudx, dvdx);//ddx(uv);
+    float2 duv2 = (float2)(dudy, dvdy);
+
+    /// solve the linear system
+    float3 dp2perp = cross(dp2, nml);
+    float3 dp1perp = cross(nml, dp1);
+    float3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    float3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+
+    // construct a scale - invariant frame
+    float invmax = rsqrt(max(dot(T, T), dot(B, B)));
+
+    // build TBN matrix
+    T = T * invmax;
+    B = B * invmax;
+    float3 N = nml;
+
+    mat3 TBN;
+    TBN.m00 = T.x;
+    TBN.m01 = T.y;
+    TBN.m02 = T.z;
+
+    TBN.m10 = B.x;
+    TBN.m11 = B.y;
+    TBN.m12 = B.z;
+
+    TBN.m20 = N.x;
+    TBN.m21 = N.y;
+    TBN.m22 = N.z;
+
     normal_t = normalize(mul3(normal_t, TBN));
+
+
 
     // Assign to frag
     fragNml.nx = normal_t.x;
@@ -204,7 +251,7 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     // Write out result:
     //fragment_buffer[id] = frag;
     fragment_buffer_col[id] = fragCol;
-    fragment_buffer_wpos[id] = fragWpos;
+    //fragment_buffer_wpos[id] = fragWpos;
     fragment_buffer_normal[id] = fragNml;
     fragment_buffer_tex[id] = fragTX;
 }

@@ -82,11 +82,15 @@ int main( int argc, char* argv[] )
     model::Scene scene;
     //scene.addTriangles(model);p
     
-    // LOAD TRAINSTATION MODEL AND SET MATERIAL ID
+    // Trainstation
     model::Model m("trainstation.obj");
-    m.setActiveMaterial(MaterialType::CARGO_METAL);
-
+    m.setActiveMaterial(MaterialType::TILED_FLOOR);
     scene.addModel(&m);
+
+    // Cargo
+    model::Model mcargo("cargo_containers.obj");
+    mcargo.setActiveMaterial(MaterialType::CARGO_METAL);
+    scene.addModel(&mcargo);
 
     if( scene.getTrianglesRef().size() == 0){
         printf("There are no triangles!");

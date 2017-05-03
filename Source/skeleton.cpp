@@ -84,7 +84,7 @@ int main( int argc, char* argv[] )
     
     // LOAD TRAINSTATION MODEL AND SET MATERIAL ID
     model::Model m("trainstation.obj");
-    m.setActiveMaterial(MaterialType::TILED_FLOOR);
+    m.setActiveMaterial(MaterialType::CARGO_METAL);
 
     scene.addModel(&m);
 

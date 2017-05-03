@@ -181,6 +181,9 @@ void RENDER::allocateOCLBuffers() {
     specular_map = new Texture("Resources/S1.bmp", context, queue);
 
 
+    Texture* cargo_tex_diffuse  = new Texture("Resources/Cargo_diffuse.bmp", context, queue);
+    Texture* cargo_tex_normal   = new Texture("Resources/Cargo_normal.bmp", context, queue);
+    Texture* cargo_tex_specular = new Texture("Resources/Cargo_spec.bmp", context, queue);
 
 
 
@@ -194,6 +197,15 @@ void RENDER::allocateOCLBuffers() {
     materials[MaterialType::TILED_FLOOR].specularity  = 1.0f;
     materials[MaterialType::TILED_FLOOR].glossiness   = 1.0f;
     materials[MaterialType::TILED_FLOOR].reflectivity = 0.0f;
+
+    // Cargo Metal
+    materials[MaterialType::CARGO_METAL].diffuse_texture = cargo_tex_diffuse;
+    materials[MaterialType::CARGO_METAL].normalmap_texture = cargo_tex_normal;
+    materials[MaterialType::CARGO_METAL].specular_texture = cargo_tex_specular;
+
+    materials[MaterialType::CARGO_METAL].specularity = 0.5f;
+    materials[MaterialType::CARGO_METAL].glossiness = 1.0f;
+    materials[MaterialType::CARGO_METAL].reflectivity = 1.0f;
 
 
     // Allocate Materials buffer
@@ -232,7 +244,7 @@ void RENDER::writeTriangles() {
     Colour *materials_all = new Colour[349526 * 3* MaterialType::__MATERIALS_MAX];
     GPUMaterial *material_properties_all = new GPUMaterial[MaterialType::__MATERIALS_MAX];
 
-    for (int i = 0; i < /*MaterialType::__MATERIALS_MAX*/1; i++) {
+    for (int i = 0; i < MaterialType::__MATERIALS_MAX; i++) {
         materials[i].prepareGPUMaterial();
         material_properties_all[i] = materials[i].gpumaterial;
 

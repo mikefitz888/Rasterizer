@@ -337,11 +337,66 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
         bool skip = false;
 
         // Naive depth clipping
-        if (s.v0.f.z <= 0.0 || s.v1.f.z <= 0.0 || s.v2.f.z <= 0.0) {
+        ufvec4 c0, c1, c2, c3;
+        int isQuad = 0;
+        /*if (s.v0.f.z <= 0.0 || s.v1.f.z <= 0.0 || s.v2.f.z <= 0.0) {
             skip = true;
+        }*/
+        const bool b1 = s.v0.f.z <= znear;
+        const bool b2 = s.v1.f.z <= znear;
+        const bool b3 = s.v2.f.z <= znear;
+        if (b1 && b2 && b3) { //all behind
+            skip = true;
+        }else if(b1 ? (b2 || b3) : (b2 && b3)){ //2 behind
+            if (!b1) {
+                c0 = s.v0;
+                c1 = s.v0; c1.f += (s.v1.f - s.v0.f) * ((c0.f.z - znear) / (c0.f.z - c1.f.z)); //Intersection 1
+                c2 = s.v0; c2.f += (s.v2.f - s.v0.f) * ((c0.f.z - znear) / (c0.f.z - c2.f.z)); //Intersection 2
+            }
+            else if (!b2) {
+                c1 = s.v1;
+                c0 = s.v1; c0.f += (s.v0.f - s.v1.f) * ((c1.f.z - znear) / (c1.f.z - c0.f.z)); //Intersection 1
+                c2 = s.v1; c2.f += (s.v2.f - s.v1.f) * ((c1.f.z - znear) / (c1.f.z - c2.f.z)); //Intersection 2
+            }
+            else if (!b3) {
+                c2 = s.v2;
+                c1 = s.v2; c1.f += (s.v1.f - s.v2.f) * ((c2.f.z - znear) / (c2.f.z - c1.f.z)); //Intersection 1
+                c0 = s.v2; c0.f += (s.v0.f - s.v2.f) * ((c2.f.z - znear) / (c2.f.z - c0.f.z)); //Intersection 2
+            }
+        }else if (!(!b1 && !b2 && !b3)) { //1 behind
+            isQuad = 0;
+            // c0 + c3 are always the intersection points
+            if (b1) {
+                c1 = s.v1;
+                c2 = s.v2;
+                c0.f = c1.f + (s.v0.f - c1.f) * ((c1.f.z - znear) / (c1.f.z - s.v0.f.z));
+                c3.f = c2.f + (s.v0.f - c2.f) * ((c2.f.z - znear) / (c2.f.z - s.v0.f.z));
+            }
+            else if (b2) {
+                c1 = s.v0;
+                c2 = s.v2;
+                c0.f = c1.f + (s.v1.f - c1.f) * ((c1.f.z - znear) / (c1.f.z - s.v1.f.z));
+                c3.f = c2.f + (s.v1.f - c2.f) * ((c2.f.z - znear) / (c2.f.z - s.v1.f.z));
+                /*c0 = s.v0;
+                c2 = s.v2;
+                c1.f = c0.f + (s.v1.f - c0.f) * ((c0.f.z - znear) / (c0.f.z - s.v1.f.z));
+                c3.f = c2.f + (s.v1.f - c2.f) * ((c2.f.z - znear) / (c2.f.z - s.v1.f.z));*/
+            }
+            else if (b3) {
+                c1 = s.v0;
+                c2 = s.v1;
+                c0.f = c1.f + (s.v2.f - c1.f) * ((c1.f.z - znear) / (c1.f.z - s.v2.f.z));
+                c3.f = c2.f + (s.v2.f - c2.f) * ((c2.f.z - znear) / (c2.f.z - s.v2.f.z));
+                /*c0 = s.v0;
+                c1 = s.v1;
+                c2.f = c0.f + (s.v2.f - c0.f) * ((c0.f.z - znear) / (c0.f.z - s.v2.f.z));
+                c3.f = c1.f + (s.v2.f - c1.f) * ((c1.f.z - znear) / (c1.f.z - s.v2.f.z));*/
+            }
         }
-        if (s.v0.f.z <= znear || s.v1.f.z <= znear || s.v2.f.z <= znear) {
-            skip = true;
+        else {
+            c0 = s.v0;
+            c1 = s.v1;
+            c2 = s.v2;
         }
 
         // Backface culling
@@ -360,124 +415,94 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
             const auto v0 = (b - a);
             const auto v1 = (c - a);
             const float inv_denom = 1.f / (v0.x * v1.y - v1.x * v0.y);
-            a <<= 4; b <<= 4; c <<= 4;
+            const float v0x_inv_d = v0.x * inv_denom;
+            const float v1x_inv_d = v1.x * inv_denom;
+            const float v0y_inv_d = v0.y * inv_denom;
+            const float v1y_inv_d = v1.y * inv_denom;
 
-            //Delta values
-            const auto Dab(a - b);
-            const auto Dbc(b - c);
-            const auto Dca = v1; //gonna trust the compiler to do the right thing here
+            do {
+                a = glm::ivec2(c0.i.x, c0.i.y);
+                b = glm::ivec2(c1.i.x, c1.i.y);
+                c = glm::ivec2(c2.i.x, c2.i.y);
 
-            //Fixed-point deltas
-            const auto FDab = Dab << 4;
-            const auto FDbc = Dbc << 4;
-            const auto FDca = Dca << 4;
+                a <<= 4; b <<= 4; c <<= 4;
 
-            //Bounding box
-            int minX = glm::clamp((glm::min(a.x, glm::min(b.x, c.x)) + 0xF) >> 4, 0, WIDTH-1);
-            int maxX = glm::clamp((glm::max(a.x, glm::max(b.x, c.x)) + 0xF) >> 4, 0, WIDTH-1);
-            int minY = glm::clamp((glm::min(a.y, glm::min(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT-1);
-            int maxY = glm::clamp((glm::max(a.y, glm::max(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT-1);
+                //Delta values
+                const auto Dab(a - b);
+                const auto Dbc(b - c);
+                const auto Dca(c - a);
 
-            //Blocksize (must be 2^n)
-            constexpr int q = 8;
+                //Fixed-point deltas
+                const auto FDab = Dab << 4;
+                const auto FDbc = Dbc << 4;
+                const auto FDca = Dca << 4;
 
-            //start in corner of block
-            minX &= ~(q - 1);
-            minY &= ~(q - 1);
+                //Bounding box
+                int minX = glm::clamp((glm::min(a.x, glm::min(b.x, c.x)) + 0xF) >> 4, 0, WIDTH - 1);
+                int maxX = glm::clamp((glm::max(a.x, glm::max(b.x, c.x)) + 0xF) >> 4, 0, WIDTH - 1);
+                int minY = glm::clamp((glm::min(a.y, glm::min(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT - 1);
+                int maxY = glm::clamp((glm::max(a.y, glm::max(b.y, c.y)) + 0xF) >> 4, 0, HEIGHT - 1);
 
-            //Half-edge constants-ish
-            int Ca = Dab.y * a.x - Dab.x * a.y;
-            int Cb = Dbc.y * b.x - Dbc.x * b.y;
-            int Cc = Dca.y * c.x - Dca.x * c.y;
+                //Blocksize (must be 2^n)
+                constexpr int q = 8;
 
-            //Adjust for fill convention
-            if (Dab.y < 0 || (Dab.y == 0 && Dab.x > 0)) Ca++;
-            if (Dbc.y < 0 || (Dbc.y == 0 && Dbc.x > 0)) Cb++;
-            if (Dca.y < 0 || (Dca.y == 0 && Dca.x > 0)) Cc++;
+                //start in corner of block
+                minX &= ~(q - 1);
+                minY &= ~(q - 1);
 
-            //Iterate over chunks
-            for (int y = minY; y < maxY; y += q) {
-                bool complete = false;
-                for (int x = minX; x < maxX; x += q) {
-                    //Corners
-                    const int x0 = x << 4;
-                    const int x1 = (x + q - 1) << 4;
-                    const int y0 = y << 4;
-                    const int y1 = (y + q - 1) << 4;
+                //Half-edge constants-ish
+                int Ca = Dab.y * a.x - Dab.x * a.y;
+                int Cb = Dbc.y * b.x - Dbc.x * b.y;
+                int Cc = Dca.y * c.x - Dca.x * c.y;
 
-                    //Half-space functions
-                    const bool a00 = Ca + Dab.x * y0 - Dab.y * x0 > 0;
-                    const bool a10 = Ca + Dab.x * y0 - Dab.y * x1 > 0;
-                    const bool a01 = Ca + Dab.x * y1 - Dab.y * x0 > 0;
-                    const bool a11 = Ca + Dab.x * y1 - Dab.y * x1 > 0;
-                    int a_ = (a00 << 0) | (a10 << 1) | (a01 << 2) | (a11 << 3);
+                //Adjust for fill convention
+                if (Dab.y < 0 || (Dab.y == 0 && Dab.x > 0)) Ca++;
+                if (Dbc.y < 0 || (Dbc.y == 0 && Dbc.x > 0)) Cb++;
+                if (Dca.y < 0 || (Dca.y == 0 && Dca.x > 0)) Cc++;
 
-                    const bool b00 = Cb + Dbc.x * y0 - Dbc.y * x0 > 0;
-                    const bool b10 = Cb + Dbc.x * y0 - Dbc.y * x1 > 0;
-                    const bool b01 = Cb + Dbc.x * y1 - Dbc.y * x0 > 0;
-                    const bool b11 = Cb + Dbc.x * y1 - Dbc.y * x1 > 0;
-                    int b_ = (b00 << 0) | (b10 << 1) | (b01 << 2) | (b11 << 3);
+                //Iterate over chunks
+                for (int y = minY; y < maxY; y += q) {
+                    bool complete = false;
+                    for (int x = minX; x < maxX; x += q) {
+                        //Corners
+                        const int x0 = x << 4;
+                        const int x1 = (x + q - 1) << 4;
+                        const int y0 = y << 4;
+                        const int y1 = (y + q - 1) << 4;
 
-                    const bool c00 = Cc + Dca.x * y0 - Dca.y * x0 > 0;
-                    const bool c10 = Cc + Dca.x * y0 - Dca.y * x1 > 0;
-                    const bool c01 = Cc + Dca.x * y1 - Dca.y * x0 > 0;
-                    const bool c11 = Cc + Dca.x * y1 - Dca.y * x1 > 0;
-                    int c_ = (c00 << 0) | (c10 << 1) | (c01 << 2) | (c11 << 3);
+                        //Half-space functions
+                        const bool a00 = Ca + Dab.x * y0 - Dab.y * x0 > 0;
+                        const bool a10 = Ca + Dab.x * y0 - Dab.y * x1 > 0;
+                        const bool a01 = Ca + Dab.x * y1 - Dab.y * x0 > 0;
+                        const bool a11 = Ca + Dab.x * y1 - Dab.y * x1 > 0;
+                        int a_ = (a00 << 0) | (a10 << 1) | (a01 << 2) | (a11 << 3);
 
-                    //Skip block if outside triangle
-                    if (a_ == 0x0 || b_ == 0x0 || c_ == 0x0) { 
-                        if (complete) x = maxX; //The remainder of the chunks are non-covered
-                        continue; 
-                    }
-                    complete = true; //The next non-covered chunk will signal the rest are non-covered
+                        const bool b00 = Cb + Dbc.x * y0 - Dbc.y * x0 > 0;
+                        const bool b10 = Cb + Dbc.x * y0 - Dbc.y * x1 > 0;
+                        const bool b01 = Cb + Dbc.x * y1 - Dbc.y * x0 > 0;
+                        const bool b11 = Cb + Dbc.x * y1 - Dbc.y * x1 > 0;
+                        int b_ = (b00 << 0) | (b10 << 1) | (b01 << 2) | (b11 << 3);
 
-                    //Accept whole block when fully covered
-                    if (a_ == 0xF && b_ == 0xF && c_ == 0xF) {
-                        for (int iy = y; iy < y + q; iy++) {
-                            for (int ix = x; ix < x + q; ix++) {
-                                glm::ivec2 v2 = glm::ivec2(ix, iy) - glm::ivec2(s.v0.i.x, s.v0.i.y);
+                        const bool c00 = Cc + Dca.x * y0 - Dca.y * x0 > 0;
+                        const bool c10 = Cc + Dca.x * y0 - Dca.y * x1 > 0;
+                        const bool c01 = Cc + Dca.x * y1 - Dca.y * x0 > 0;
+                        const bool c11 = Cc + Dca.x * y1 - Dca.y * x1 > 0;
+                        int c_ = (c00 << 0) | (c10 << 1) | (c01 << 2) | (c11 << 3);
 
-                                float b = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
-                                float c = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
-                                float a = 1.0f - b - c;
-
-                                // Correct barycentric coords for perspective:
-                                float zf = a / s.v0.f.z + b / s.v1.f.z + c / s.v2.f.z;
-                                a /= (s.v0.f.z*zf);
-                                b /= (s.v1.f.z*zf);
-                                c /= (s.v2.f.z*zf);
-
-                                // Perspective-correct depth;
-                                float depth = (a*s.v0.f.z + b*s.v1.f.z + c*s.v2.f.z);
-
-                                const auto tdata = frame_buffer->getCPUBuffer_tdata() + ix + iy * WIDTH;
-                                if ((tdata->depth == 0 || depth < tdata->depth) && depth > znear && depth < zfar) {
-                                    // Store triangle
-                                    tdata->triangle_id = i;
-                                    // Store barycentric coordinates
-                                    tdata->va = a;
-                                    tdata->vb = b;
-                                    tdata->vc = c;
-
-                                    // Write interpolated depth
-                                    tdata->depth = depth;
-                                }
-                            }
+                        //Skip block if outside triangle
+                        if (a_ == 0x0 || b_ == 0x0 || c_ == 0x0) {
+                            if (complete) x = maxX; //The remainder of the chunks are non-covered
+                            continue;
                         }
-                    }
-                    else {
-                        //Partially covered
-                        int CYa = Ca + Dab.x * y0 - Dab.y * x0;
-                        int CYb = Cb + Dbc.x * y0 - Dbc.y * x0;
-                        int CYc = Cc + Dca.x * y0 - Dca.y * x0;
+                        complete = true; //The next non-covered chunk will signal the rest are non-covered
 
-                        for (int iy = y; iy < y + q; iy++) {
-                            int CXa = CYa, CXb = CYb, CXc = CYc;
-                            for (int ix = x; ix < x + q; ix++) {
-                                if (CXa > 0 && CXb > 0 && CXc > 0) {
+                        //Accept whole block when fully covered
+                        if (a_ == 0xF && b_ == 0xF && c_ == 0xF) {
+                            for (int iy = y; iy < y + q; iy++) {
+                                for (int ix = x; ix < x + q; ix++) {
                                     glm::ivec2 v2 = glm::ivec2(ix, iy) - glm::ivec2(s.v0.i.x, s.v0.i.y);
-                                    float b = (v2.x * v1.y - v1.x * v2.y) * inv_denom;
-                                    float c = (v0.x * v2.y - v2.x * v0.y) * inv_denom;
+                                    float b = (v2.x * v1y_inv_d - v1x_inv_d * v2.y);
+                                    float c = (v0x_inv_d * v2.y - v2.x * v0y_inv_d);
                                     float a = 1.0f - b - c;
 
                                     // Correct barycentric coords for perspective:
@@ -502,17 +527,59 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                                         tdata->depth = depth;
                                     }
                                 }
-                                CXa -= FDab.y;
-                                CXb -= FDbc.y;
-                                CXc -= FDca.y;
                             }
-                            CYa += FDab.x;
-                            CYb += FDbc.x;
-                            CYc += FDca.x;
+                        }
+                        else {
+                            //Partially covered
+                            int CYa = Ca + Dab.x * y0 - Dab.y * x0;
+                            int CYb = Cb + Dbc.x * y0 - Dbc.y * x0;
+                            int CYc = Cc + Dca.x * y0 - Dca.y * x0;
+
+                            for (int iy = y; iy < y + q; iy++) {
+                                int CXa = CYa, CXb = CYb, CXc = CYc;
+                                for (int ix = x; ix < x + q; ix++) {
+                                    if (CXa > 0 && CXb > 0 && CXc > 0) {
+                                        glm::ivec2 v2 = glm::ivec2(ix, iy) - glm::ivec2(s.v0.i.x, s.v0.i.y);
+                                        float b = (v2.x * v1y_inv_d - v1x_inv_d * v2.y);
+                                        float c = (v0x_inv_d * v2.y - v2.x * v0y_inv_d);
+                                        float a = 1.0f - b - c;
+
+                                        // Correct barycentric coords for perspective:
+                                        float zf = a / s.v0.f.z + b / s.v1.f.z + c / s.v2.f.z;
+                                        a /= (s.v0.f.z*zf);
+                                        b /= (s.v1.f.z*zf);
+                                        c /= (s.v2.f.z*zf);
+
+                                        // Perspective-correct depth;
+                                        float depth = (a*s.v0.f.z + b*s.v1.f.z + c*s.v2.f.z);
+
+                                        const auto tdata = frame_buffer->getCPUBuffer_tdata() + ix + iy * WIDTH;
+                                        if ((tdata->depth == 0 || depth < tdata->depth) && depth > znear && depth < zfar) {
+                                            // Store triangle
+                                            tdata->triangle_id = i;
+                                            // Store barycentric coordinates
+                                            tdata->va = a;
+                                            tdata->vb = b;
+                                            tdata->vc = c;
+
+                                            // Write interpolated depth
+                                            tdata->depth = depth;
+                                        }
+                                    }
+                                    CXa -= FDab.y;
+                                    CXb -= FDbc.y;
+                                    CXc -= FDca.y;
+                                }
+                                CYa += FDab.x;
+                                CYb += FDbc.x;
+                                CYc += FDca.x;
+                            }
                         }
                     }
                 }
-            }
+
+                c1 = c3;
+            } while (isQuad--);
         }   
     }
 

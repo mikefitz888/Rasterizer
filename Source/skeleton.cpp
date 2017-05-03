@@ -294,8 +294,10 @@ void Update()
         dx = mouse_x - SCREEN_WIDTH/2;
         dy = SCREEN_HEIGHT/2 - mouse_y;
 
-        std::cout << "dx: " << dx << std::endl;
-        std::cout << "dy: " << dy << std::endl;
+        if (VERBOSE) {
+            std::cout << "dx: " << dx << std::endl;
+            std::cout << "dy: " << dy << std::endl;
+        }
 
         yaw -= (float)dx*0.005f;
         pitch -= (float)dy*0.005f;

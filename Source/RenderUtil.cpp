@@ -430,7 +430,8 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
                 c0 = s.v2; c0.f += (s.v0.f - s.v2.f) * ((c2.f.z - znear) / (c2.f.z - c0.f.z)); //Intersection 2
             }
         }else if (!(!b1 && !b2 && !b3)) { //1 behind
-            isQuad = 0;
+            isQuad = 1;
+            skip = true;
             // c0 + c3 are always the intersection points
             if (b1) {
                 c1 = s.v1;

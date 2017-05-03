@@ -28,11 +28,15 @@ kernel void shader_reflections(global FragmentColour* fragment_buffer_colour,
     }
 
     // Do stuff
-    float3 camdir_v = (float3)(camdir.x, camdir.y, camdir.z);
+    //float3 camdir_v = (float3)(camdir.x, camdir.y, camdir.z);
+    float3 world_pos = (float3)(fragWpos.x, fragWpos.y, fragWpos.z);
+    float3 cam_pos = (float3)(campos.x, campos.y, campos.z);
+
+    float3 view_vec = world_pos - cam_pos;
     float3 normal_v = (float3)(fragNml.nx, fragNml.ny, fragNml.nz);
-    camdir_v = -normalize(camdir_v);
+    view_vec = normalize(view_vec);
     normal_v = normalize(normal_v);
-    float3 refl_vec = camdir_v - 2.0f*dot(camdir_v, normal_v)*normal_v;
+    float3 refl_vec = view_vec - 2.0f*dot(view_vec, normal_v)*normal_v;
     
    // float3 refl_vec = reflect((float3)(camdir.x, camdir.y, camdir.z), (float3)(fragNml.nx, fragNml.ny, fragNml.nz));
     Colour result = textureCube(reflection_map, refl_vec, fragTX);

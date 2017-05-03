@@ -26,6 +26,7 @@ std::map<std::string, cl::Kernel*> RENDER::kernels;
 Texture* default_tex;
 Texture* normal_map;
 Texture* specular_map;
+Texture* cubemap;
 
 
 // Material array
@@ -185,8 +186,11 @@ void RENDER::allocateOCLBuffers() {
     Texture* cargo_tex_normal   = new Texture("Resources/Cargo_normal.bmp", context, queue);
     Texture* cargo_tex_specular = new Texture("Resources/Cargo_spec.bmp", context, queue);
 
+    Texture* concrete_diffuse = new Texture("Resources/concrete_diffuse.bmp", context, queue);
+    Texture* concrete_normal = new Texture("Resources/concrete_normal.bmp", context, queue);
 
 
+    cubemap = new Texture("Resources/cubemap.bmp", context, queue);
     ///// ---------------- PREPARE MATERIALS ---------------- 
 
     // Tiled floor
@@ -206,6 +210,15 @@ void RENDER::allocateOCLBuffers() {
     materials[MaterialType::CARGO_METAL].specularity = 0.5f;
     materials[MaterialType::CARGO_METAL].glossiness = 1.0f;
     materials[MaterialType::CARGO_METAL].reflectivity = 1.0f;
+
+    // Concrete floor
+    materials[MaterialType::CONCRETE_FLOOR].diffuse_texture = concrete_diffuse;
+    materials[MaterialType::CONCRETE_FLOOR].normalmap_texture = concrete_normal;
+    materials[MaterialType::CONCRETE_FLOOR].specular_texture = cargo_tex_specular;
+
+    materials[MaterialType::CONCRETE_FLOOR].specularity = 0.35f;
+    materials[MaterialType::CONCRETE_FLOOR].glossiness = 1.0f;
+    materials[MaterialType::CONCRETE_FLOOR].reflectivity = 0.75f;
 
 
     // Allocate Materials buffer
@@ -999,6 +1012,31 @@ void RENDER::calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_
     //queue->finish();
 }
 
+void RENDER::calculateReflections(FrameBuffer* in_frame_buffer, glm::vec3 campos, glm::vec3 camdir) {
+
+    // Set kernel args
+    kernels["shader_reflections"]->setArg(0, *in_frame_buffer->getGPUBuffer_colour());
+    kernels["shader_reflections"]->setArg(1, *in_frame_buffer->getGPUBuffer_fx());
+    kernels["shader_reflections"]->setArg(2, *in_frame_buffer->getGPUBuffer_normal());
+    kernels["shader_reflections"]->setArg(3, *in_frame_buffer->getGPUBuffer_wpos());
+    kernels["shader_reflections"]->setArg(4, *in_frame_buffer->getGPUBuffer_tx());
+    kernels["shader_reflections"]->setArg(5, *in_frame_buffer->getGPUBuffer_tdata());
+
+    kernels["shader_reflections"]->setArg(6, *cubemap->getGPUPtr());
+    kernels["shader_reflections"]->setArg(7, sizeof(cl_float) * 3, &campos);
+    kernels["shader_reflections"]->setArg(8, sizeof(cl_float) * 3, &camdir);
+    int sw = in_frame_buffer->getWidth();
+    int sh = in_frame_buffer->getHeight();
+    kernels["shader_reflections"]->setArg(9, sizeof(int), &sw);
+    kernels["shader_reflections"]->setArg(10, sizeof(int), &sh);
+
+    // Enqueue kernel
+    const cl::NDRange screen = cl::NDRange(sw*sh);
+    cl_int err = queue->enqueueNDRangeKernel(*kernels["shader_reflections"], NULL, screen);
+    if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
+    queue->finish();
+}
+
 void RENDER::accumulateBuffers(FrameBuffer* in_frame_buffer, FrameBuffer* in_ssao_buffer, FrameBuffer* in_shadow_buffer, int WIDTH, int HEIGHT) {
 
     // Set kernel args
@@ -1021,16 +1059,18 @@ FrameBuffer::FrameBuffer(int width, int height, const cl::Context *context) {
     this->height = height;
 
     this->cpu_buffer_colour = new PixelColour[width*height];
-    this->cpu_buffer_tdata  = new PixelTData[width*height];
-    this->cpu_buffer_wpos   = new PixelWPos[width*height];
+    this->cpu_buffer_tdata = new PixelTData[width*height];
+    this->cpu_buffer_wpos = new PixelWPos[width*height];
     this->cpu_buffer_normal = new PixelNormal[width*height];
-    this->cpu_bufer_tx      = new PixelTX[width*height];
+    this->cpu_bufer_tx = new PixelTX[width*height];
+    this->cpu_buffer_fx = new PixelFX[width*height];
 
     this->gpu_buffer_colour = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelColour) * width * height);
-    this->gpu_buffer_tdata  = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelTData) * width * height);
-    this->gpu_buffer_wpos   = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelWPos) * width * height);
+    this->gpu_buffer_tdata = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelTData) * width * height);
+    this->gpu_buffer_wpos = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelWPos) * width * height);
     this->gpu_buffer_normal = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelNormal) * width * height);
-    this->gpu_buffer_tx     = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelTX) * width * height);
+    this->gpu_buffer_tx = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelTX) * width * height);
+    this->gpu_buffer_fx = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(PixelFX) * width * height);
 }
 
 PixelColour* FrameBuffer::getCPUBuffer_colour() {
@@ -1051,6 +1091,10 @@ PixelNormal* FrameBuffer::getCPUBuffer_normal() {
 
 PixelTX* FrameBuffer::getCPUBuffer_tx() {
     return this->cpu_bufer_tx;
+}
+
+PixelFX* FrameBuffer::getCPUBuffer_fx() {
+    return this->cpu_buffer_fx;
 }
 
 cl::Buffer* FrameBuffer::getGPUBuffer_colour() {
@@ -1074,18 +1118,24 @@ cl::Buffer* FrameBuffer::getGPUBuffer_tx() {
     return this->gpu_buffer_tx;
 }
 
+cl::Buffer* FrameBuffer::getGPUBuffer_fx() {
+    return this->gpu_buffer_fx;
+}
+
 FrameBuffer::~FrameBuffer() {
     delete[] this->cpu_buffer_colour;
     delete[] this->cpu_buffer_tdata;
     delete[] this->cpu_buffer_wpos;
     delete[] this->cpu_buffer_normal;
     delete[] this->cpu_bufer_tx;
+    delete[] this->cpu_buffer_fx;
 
     delete this->gpu_buffer_colour;
     delete this->gpu_buffer_tdata;
     delete this->gpu_buffer_wpos;
     delete this->gpu_buffer_normal;
     delete this->gpu_buffer_tx;
+    delete this->gpu_buffer_fx;
 }
 
 int FrameBuffer::getWidth() {
@@ -1101,8 +1151,8 @@ void FrameBuffer::saveBMP(const std::string filename) {
     for (int i = 0; i < this->width; i++) {
         for (int j = 0; j < this->height; j++) {
             bmp->set_pixel(i, j, this->cpu_buffer_colour[i + j*this->width].r,
-                                 this->cpu_buffer_colour[i + j*this->width].g,
-                                 this->cpu_buffer_colour[i + j*this->width].b);
+                           this->cpu_buffer_colour[i + j*this->width].g,
+                           this->cpu_buffer_colour[i + j*this->width].b);
         }
     }
     bmp->save_image(filename);
@@ -1116,6 +1166,7 @@ void FrameBuffer::clear() {
             this->cpu_buffer_wpos[i + j*this->width] = {};
             this->cpu_buffer_normal[i + j*this->width] = {};
             this->cpu_bufer_tx[i + j*this->width] = {};
+            this->cpu_buffer_fx[i + j*this->width] = {};
         }
     }
 }
@@ -1137,6 +1188,11 @@ void FrameBuffer::transferGPUtoCPU_Normal() {
 }
 void FrameBuffer::transferGPUtoCPU_Tx() {
     RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_tx(), CL_TRUE, 0, sizeof(PixelTX) *this->getWidth()*this->getHeight(), this->getCPUBuffer_tx());
+    RENDER::queue->finish();
+}
+
+void FrameBuffer::transferGPUtoCPU_Fx() {
+    RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_fx(), CL_TRUE, 0, sizeof(PixelFX) *this->getWidth()*this->getHeight(), this->getCPUBuffer_fx());
     RENDER::queue->finish();
 }
 

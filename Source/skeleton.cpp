@@ -82,6 +82,8 @@ int main( int argc, char* argv[] )
     model::Scene scene;
     //scene.addTriangles(model);p
     
+    // LOAD TRAINSTATION MODEL AND SET MATERIAL ID
+
     // Trainstation
     model::Model m("trainstation.obj");
     m.setActiveMaterial(MaterialType::TILED_FLOOR);
@@ -91,6 +93,11 @@ int main( int argc, char* argv[] )
     model::Model mcargo("cargo_containers.obj");
     mcargo.setActiveMaterial(MaterialType::CARGO_METAL);
     scene.addModel(&mcargo);
+
+    // Concrete
+    model::Model mconcrete("concrete.obj");
+    mconcrete.setActiveMaterial(MaterialType::CONCRETE_FLOOR);
+    scene.addModel(&mconcrete);
 
     if( scene.getTrianglesRef().size() == 0){
         printf("There are no triangles!");
@@ -301,10 +308,8 @@ void Update()
         dx = mouse_x - SCREEN_WIDTH/2;
         dy = SCREEN_HEIGHT/2 - mouse_y;
 
-        if (VERBOSE) {
-            std::cout << "dx: " << dx << std::endl;
-            std::cout << "dy: " << dy << std::endl;
-        }
+        std::cout << "dx: " << dx << std::endl;
+        std::cout << "dy: " << dy << std::endl;
 
         yaw -= (float)dx*0.005f;
         pitch -= (float)dy*0.005f;

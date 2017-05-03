@@ -21,7 +21,7 @@
 #include "textures.h"
 
 // Materials
-enum MaterialType : unsigned int { TILED_FLOOR, CARGO_METAL, SUBWAY_POSTER, __MATERIALS_MAX };
+enum MaterialType : unsigned int { TILED_FLOOR, CARGO_METAL, SUBWAY_POSTER, CONCRETE_FLOOR, __MATERIALS_MAX };
 
 union ufvec4 {
     glm::vec4 f;
@@ -95,6 +95,9 @@ struct PixelTX {
     float uvx, uvy;
     float dudx, dvdx, dudy, dvdy;
 };
+struct PixelFX {
+    float reflection_val, glossiness;
+};
 
 
 struct GPUMaterial {
@@ -145,13 +148,14 @@ class FrameBuffer {
     PixelWPos*   cpu_buffer_wpos;
     PixelNormal* cpu_buffer_normal;
     PixelTX*     cpu_bufer_tx;
-
+    PixelFX*     cpu_buffer_fx;
 
     cl::Buffer* gpu_buffer_colour;
     cl::Buffer* gpu_buffer_tdata;
     cl::Buffer* gpu_buffer_wpos;
     cl::Buffer* gpu_buffer_normal;
     cl::Buffer* gpu_buffer_tx;
+    cl::Buffer* gpu_buffer_fx;
 
 public:
     FrameBuffer(int width, int height, const cl::Context *context);
@@ -163,12 +167,14 @@ public:
     PixelWPos*  getCPUBuffer_wpos();
     PixelNormal* getCPUBuffer_normal();
     PixelTX* getCPUBuffer_tx();
+    PixelFX* getCPUBuffer_fx();
 
     cl::Buffer* getGPUBuffer_colour();
     cl::Buffer* getGPUBuffer_tdata();
     cl::Buffer* getGPUBuffer_wpos();
     cl::Buffer* getGPUBuffer_normal();
     cl::Buffer* getGPUBuffer_tx();
+    cl::Buffer* getGPUBuffer_fx();
 
     int getWidth();
     int getHeight();
@@ -181,6 +187,7 @@ public:
     void transferGPUtoCPU_Wpos();
     void transferGPUtoCPU_Normal();
     void transferGPUtoCPU_Tx();
+    void transferGPUtoCPU_Fx();
 };
 
 class RENDER {
@@ -245,9 +252,11 @@ public:
     static void calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir, glm::vec3 campos);
     static void calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_lighting_accum, glm::vec3 campos, glm::vec3 camdir, glm::vec3 lightpos, glm::vec3 lightcolour, float light_range, float specularity, float glossiness);
 
+    static void calculateReflections(FrameBuffer* in_frame_buffer, glm::vec3 campos, glm::vec3 camdir);
+
     // Result accumulation
     static void accumulateBuffers(FrameBuffer* in_frame_buffer, FrameBuffer* in_ssao_buffer, FrameBuffer* in_shadow_buffer, int WIDTH, int HEIGHT);
-
+    
 
     static void release();
     static inline cl::Context* getContext() { return RENDER::context; }

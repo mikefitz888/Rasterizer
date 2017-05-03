@@ -12,12 +12,12 @@ typedef struct __attribute__((packed)) {
 // ---------------------------------------------- //
 // Mip level constant
 /*
-    Defines the offset in the texture array where the mip-map level data starts for each level.
-    - Mip map levels go from 512x512 to 1x1 dividing by equal powers of 2 each time.
-    - Textures should generate a full set of mip-maps for texture filtering.
+Defines the offset in the texture array where the mip-map level data starts for each level.
+- Mip map levels go from 512x512 to 1x1 dividing by equal powers of 2 each time.
+- Textures should generate a full set of mip-maps for texture filtering.
 */
 __constant int _MIP_LV_OFFSETS[10] = { 0, 262144, 327680, 344064, 348160,
-                                        349184, 349440, 349504, 349520, 349524 };
+349184, 349440, 349504, 349520, 349524 };
 
 // This is the offset to the default LOD selection used in filtering. A higher number will result in more extreme texture filtering
 //  - Lowering this value will result in sharper textures, but more non-filtered artifacts such as shimmering will appear
@@ -26,20 +26,20 @@ __constant int _MIP_LV_OFFSETS[10] = { 0, 262144, 327680, 344064, 348160,
 // ---------------------------------------------- //
 // Fragment
 /*typedef struct __attribute__((packed, aligned(4))) {
-    uchar r, g, b, a;
-    uint triangle_id;
+uchar r, g, b, a;
+uint triangle_id;
 
-    // Interpolators
-    float va, vb, vc; // Barycentric coordinates
+// Interpolators
+float va, vb, vc; // Barycentric coordinates
 
-                      // Stored information
-    float depth;
-    float x, y, z;
-    float nx, ny, nz;
-    float uvx, uvy;
+// Stored information
+float depth;
+float x, y, z;
+float nx, ny, nz;
+float uvx, uvy;
 
-    // Gradient values for texture coordinates
-    float dudx, dvdx, dudy, dvdy;
+// Gradient values for texture coordinates
+float dudx, dvdx, dudy, dvdy;
 
 } Fragment;*/
 typedef struct __attribute__((packed, aligned(4))) {
@@ -65,14 +65,78 @@ typedef struct __attribute__((packed, aligned(4))) {
     float dudx, dvdx, dudy, dvdy;
 } FragmentTX;
 
+typedef struct __attribute__((packed, aligned(4))) {
+    float reflection_val, glossiness;
+} FragmentFX;
 
+
+/// UTILITY
+/*float2 cube2uv(float3 eyePos) {
+float2 uv;
+float3 spacePos = eyePos;
+
+if (spacePos.x<0.0) { spacePos.x = -spacePos.x; }
+if (spacePos.y<0.0) { spacePos.y = -spacePos.y; }
+if (spacePos.z<0.0) { spacePos.z = -spacePos.z; }
+
+if (spacePos.x >= spacePos.y&&spacePos.x >= spacePos.z) {
+if (eyePos.x>0.0) //LEFT
+{
+uv.x = 0.125;
+uv.y = 0.75;
+uv.x -= eyePos.y / eyePos.x*0.125;
+uv.y -= eyePos.z / eyePos.x*0.25;
+} else //RIGHT
+{
+uv.x = 0.625;
+uv.y = 0.75;
+uv.x -= eyePos.y / eyePos.x*0.125;
+uv.y += eyePos.z / eyePos.x*0.25;
+}
+}
+
+if (spacePos.y>spacePos.x&&spacePos.y >= spacePos.z) {
+if (eyePos.y>0.0) //BACK
+{
+uv.x = 0.375;
+uv.y = 0.25;
+uv.x += eyePos.x / eyePos.y*0.125;
+uv.y -= eyePos.z / eyePos.y*0.25;
+} else //FRONT
+{
+uv.x = 0.375;
+uv.y = 0.75;
+uv.x += eyePos.x / eyePos.y*0.125;
+uv.y += eyePos.z / eyePos.y*0.25;
+}
+}
+
+
+if (spacePos.z>spacePos.x&&spacePos.z>spacePos.y) {
+if (eyePos.z>0.0) //TOP
+{
+uv.x = 0.625;
+uv.y = 0.25;
+uv.x -= eyePos.x / eyePos.z*0.125;
+uv.y -= eyePos.y / eyePos.z*0.25;
+} else  //BOTTOM
+{
+uv.x = 0.125;
+uv.y = 0.25;
+uv.x += eyePos.x / eyePos.z*0.125;
+uv.y -= eyePos.y / eyePos.z*0.25;
+}
+}
+
+return uv;
+}*/
 
 
 // Same function with LOD level specified
 // Texture type (0-diffuse, 1-normal, 2-specular)
 inline Colour texture2D_LOD(global Colour* mat, uint material_id, uint texture_type, float uvx, float uvy, int LOD_level) {
     // Determine size
-    int size = 512>>LOD_level;
+    int size = 512 >> LOD_level;
 
     // Convert uv to int
     uvx *= size;
@@ -90,8 +154,8 @@ inline Colour texture2D_LOD(global Colour* mat, uint material_id, uint texture_t
     // TODO: Incorperate texture filtering
     int LOD_offset = _MIP_LV_OFFSETS[LOD_level];
     int sample_index = (uvx_i + uvy_i*size) + LOD_offset;
-    if (sample_index < LOD_offset || sample_index >= LOD_offset+size*size) {
-       // printf("SAMPLING INDEX ERROR!! \n"); // Need a more elegant way of handling n
+    if (sample_index < LOD_offset || sample_index >= LOD_offset + size*size) {
+        // printf("SAMPLING INDEX ERROR!! \n"); // Need a more elegant way of handling n
         Colour c;
         //return c;
     }
@@ -106,8 +170,8 @@ inline Colour texture2D_NN(global Colour* mat, uint material_id, uint texture_ty
 // - Uses gradient function of fragment
 
 /*
-    This function bilinearly interpolates the value of each pixel when a sample is made between pixel areas. 
-    It blends the values of the pixel based on the offset ratio between the pixel
+This function bilinearly interpolates the value of each pixel when a sample is made between pixel areas.
+It blends the values of the pixel based on the offset ratio between the pixel
 
 */
 inline Colour texture2D_bilinear(global Colour* mat, uint material_id, uint texture_type, float uvx, float uvy, FragmentTX frag) {
@@ -146,9 +210,9 @@ inline Colour texture2D_bilinear(global Colour* mat, uint material_id, uint text
 
     // Sample multiple points
     int LOD_offset = _MIP_LV_OFFSETS[LOD_level];
-    Colour c1 = mat[LOD_offset + uvx_i  + uvy_i*size + (material_id*3+texture_type) * 349526];
+    Colour c1 = mat[LOD_offset + uvx_i + uvy_i*size + (material_id * 3 + texture_type) * 349526];
     Colour c2 = mat[LOD_offset + uvx1_i + uvy_i*size + (material_id * 3 + texture_type) * 349526];
-    Colour c3 = mat[LOD_offset + uvx_i  + uvy1_i*size + (material_id * 3 + texture_type) * 349526];
+    Colour c3 = mat[LOD_offset + uvx_i + uvy1_i*size + (material_id * 3 + texture_type) * 349526];
     Colour c4 = mat[LOD_offset + uvx1_i + uvy1_i*size + (material_id * 3 + texture_type) * 349526];
 
     // Calculate result colour
@@ -159,4 +223,11 @@ inline Colour texture2D_bilinear(global Colour* mat, uint material_id, uint text
     result.a = (c1.a*u_opp + c2.a*u_ratio)*v_opp + (c3.a*u_opp + c4.a*u_ratio)*v_ratio;
     return result;
 }
+
+
+/*inline Colour textureCube(global Colour* tex, float3 vec, FragmentTX frag) {
+float2 uv = (float2)(0.5f, 0.5f); //cube2uv(vec);
+texture2D_bilinear(tex, 0, 0, uv.x, uv.y, frag);
+}*/
+
 #endif

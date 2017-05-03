@@ -67,7 +67,7 @@ typedef union {
 } ufvec4;
 
 typedef struct __attribute__((packed)) {
-    ufvec4 v0, v1, v2, v3;
+    ufvec4 v0, v1, v2/*, v3*/;
     uint id;
 } triplet;
 

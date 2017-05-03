@@ -178,6 +178,8 @@ int main( int argc, char* argv[] )
         // Render SSAO buffer
         RENDER::calculateSSAO(frame_buffer, ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
        
+        // Calculate reflections
+        RENDER::calculateReflections(frame_buffer, camposs, camdir);
 
         // Accumulate results on GPU
         RENDER::accumulateBuffers(frame_buffer, ssao_buffer, shadow_buffer, SCREEN_WIDTH, SCREEN_HEIGHT);

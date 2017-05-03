@@ -71,7 +71,7 @@ typedef struct __attribute__((packed, aligned(4))) {
 
 
 /// UTILITY
-/*float2 cube2uv(float3 eyePos) {
+float2 cube2uv(float3 eyePos) {
 float2 uv;
 float3 spacePos = eyePos;
 
@@ -129,7 +129,7 @@ uv.y -= eyePos.y / eyePos.z*0.25;
 }
 
 return uv;
-}*/
+}
 
 
 // Same function with LOD level specified
@@ -225,9 +225,9 @@ inline Colour texture2D_bilinear(global Colour* mat, uint material_id, uint text
 }
 
 
-/*inline Colour textureCube(global Colour* tex, float3 vec, FragmentTX frag) {
-float2 uv = (float2)(0.5f, 0.5f); //cube2uv(vec);
-texture2D_bilinear(tex, 0, 0, uv.x, uv.y, frag);
-}*/
+inline Colour textureCube(global Colour* tex, float3 vec, FragmentTX frag) {
+    float2 uv = cube2uv(vec);
+    return texture2D_bilinear(tex, 0, 0, uv.x, uv.y, frag);  
+}
 
 #endif

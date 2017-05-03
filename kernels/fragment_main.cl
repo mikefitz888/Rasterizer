@@ -39,7 +39,7 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
                           global FragmentWPos* fragment_buffer_wpos,
                           global FragmentNormal* fragment_buffer_normal,
                           global FragmentTX* fragment_buffer_tex,
-
+                          global FragmentFX* fragment_buffer_fx,
 
                           global Triangle* triangle_buffer_all, 
                           /*global Colour* default_tex, 
@@ -57,13 +57,15 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     FragmentWPos   fragWpos  = fragment_buffer_wpos[id];
     FragmentNormal fragNml   = fragment_buffer_normal[id];
     FragmentTX     fragTX    = fragment_buffer_tex[id];
-
+    FragmentFX     fragFX = fragment_buffer_fx[id];
 
     uint td = fragTdata.triangle_id;
     Triangle t = triangle_buffer_all[td];
 
     // Pull material properties
     MaterialProperties mp = material_properties[t.material_id];
+    fragFX.glossiness = mp.glossiness;
+    fragFX.reflection_val = mp.reflectivity;
 
     if (fragTdata.depth == 0) {
         fragCol.r = 0;
@@ -254,4 +256,5 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     //fragment_buffer_wpos[id] = fragWpos;
     fragment_buffer_normal[id] = fragNml;
     fragment_buffer_tex[id] = fragTX;
+    fragment_buffer_fx[id] = fragFX;
 }

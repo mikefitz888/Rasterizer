@@ -104,7 +104,8 @@ void RENDER::loadOCLKernels() {
                                                 "shader_post_ssao", 
                                                 "shader_directional_light_shadow",
                                                 "shader_point_light",
-                                                "accumulate_buffers"};
+                                                "accumulate_buffers",
+                                                "shader_reflections"};
     std::string start = "kernels/";
     std::string ext = ".cl";
     for (auto n : kernel_names) {
@@ -676,17 +677,18 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     kernels["fragment_main"]->setArg(2, *frame_buffer->getGPUBuffer_wpos());
     kernels["fragment_main"]->setArg(3, *frame_buffer->getGPUBuffer_normal());
     kernels["fragment_main"]->setArg(4, *frame_buffer->getGPUBuffer_tx());
+    kernels["fragment_main"]->setArg(5, *frame_buffer->getGPUBuffer_fx());
 
-    kernels["fragment_main"]->setArg(5, *triangle_buf_alldata);
+    kernels["fragment_main"]->setArg(6, *triangle_buf_alldata);
     /*kernels["fragment_main"]->setArg(6, *default_tex->getGPUPtr());
     kernels["fragment_main"]->setArg(7, *normal_map->getGPUPtr());
     kernels["fragment_main"]->setArg(8, *specular_map->getGPUPtr());*/
-    kernels["fragment_main"]->setArg(6, /**default_tex->getGPUPtr()*/*material_buffer);
-    kernels["fragment_main"]->setArg(7, *material_buffer_properties);
+    kernels["fragment_main"]->setArg(7, /**default_tex->getGPUPtr()*/*material_buffer);
+    kernels["fragment_main"]->setArg(8, *material_buffer_properties);
     int swi = WIDTH;
     int shi = HEIGHT;
-    kernels["fragment_main"]->setArg(8, sizeof(int), &swi);
-    kernels["fragment_main"]->setArg(9, sizeof(int), &shi);
+    kernels["fragment_main"]->setArg(9, sizeof(int), &swi);
+    kernels["fragment_main"]->setArg(10, sizeof(int), &shi);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     const cl::NDRange offseta = cl::NDRange(0);

@@ -26,8 +26,16 @@ kernel void shader_reflections(global FragmentColour* fragment_buffer_colour,
     if (fragTD.depth <= 0) {
         return;
     }
+
     // Do stuff
-    /*Colour result = textureCube(reflection_map, (float3)(camdir.x, camdir.y, camdir.z), fragTX);
+    float3 camdir_v = (float3)(camdir.x, camdir.y, camdir.z);
+    float3 normal_v = (float3)(fragNml.nx, fragNml.ny, fragNml.nz);
+    camdir_v = -normalize(camdir_v);
+    normal_v = normalize(normal_v);
+    float3 refl_vec = camdir_v - 2.0f*dot(camdir_v, normal_v)*normal_v;
+    
+   // float3 refl_vec = reflect((float3)(camdir.x, camdir.y, camdir.z), (float3)(fragNml.nx, fragNml.ny, fragNml.nz));
+    Colour result = textureCube(reflection_map, refl_vec, fragTX);
 
     // Write out result
     if (fragFX.reflection_val > 0.0f) {
@@ -35,6 +43,6 @@ kernel void shader_reflections(global FragmentColour* fragment_buffer_colour,
         fragCol.g = result.g;
         fragCol.b = result.b;
         fragment_buffer_colour[id] = fragCol;
-    }*/
+    }
 
 }

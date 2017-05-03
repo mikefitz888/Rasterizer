@@ -65,7 +65,7 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     // Pull material properties
     MaterialProperties mp = material_properties[t.material_id];
     fragFX.glossiness = mp.glossiness;
-    fragFX.reflection_val = mp.reflectivity;
+    
 
     if (fragTdata.depth == 0) {
         fragCol.r = 0;
@@ -156,6 +156,7 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     Colour spec_col = texture2D_bilinear(material_textures, t.material_id, 2, fragTX.uvx, fragTX.uvy, fragTX);
    // Colour spec_col = texture2D_LOD(materials, 0, 2, fragTX.uvx, fragTX.uvy, 0);
     fragCol.a = spec_col.r*mp.specularity;
+    fragFX.reflection_val = mp.reflectivity*(spec_col.r/255.0f);
 
     // Normal mapping
     Colour norm_col = texture2D_bilinear(material_textures, t.material_id, 1, fragTX.uvx, fragTX.uvy, fragTX);
@@ -244,9 +245,9 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
 
 
     // Assign to frag
-    fragNml.nx = normal_t.x;
-    fragNml.ny = normal_t.y;
-    fragNml.nz = normal_t.z;
+    fragNml.nx = normal_t.x*mp.offset_strength + fragNml.nx*(1.0f- mp.offset_strength);
+    fragNml.ny = normal_t.y*mp.offset_strength + fragNml.ny*(1.0f - mp.offset_strength);
+    fragNml.nz = normal_t.z*mp.offset_strength + fragNml.nz*(1.0f - mp.offset_strength);
 
 
     

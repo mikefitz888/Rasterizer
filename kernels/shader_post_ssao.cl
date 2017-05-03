@@ -7,9 +7,9 @@
 #include "kernels/Textures/Textures.cl"
 #include "kernels/Utility/Matrix.cl"
 
-#define POWER 3.8f
-#define STRENGTH 170.5f
-#define MAX_SAMPLE_RADIUS 1.25f
+#define POWER 4.1f
+#define STRENGTH 800.5f
+#define MAX_SAMPLE_RADIUS 2.25f
 #define MAX_RANGE 4.5f
 
 
@@ -92,7 +92,7 @@ kernel void shader_post_ssao(global FragmentWPos* fragment_buffer_wpos,
 
         // If kernel vector depth is greated than the sampled result stored in the array, occlusion occurs. We then have to perform the range check to verify the occluding surface is nearby in world-space
         if (projected_sample.z < projected_kernel_vector.z && length((float3)(sample_fragment_wpos.x - fragWpos.x, sample_fragment_wpos.y - fragWpos.y, sample_fragment_wpos.z - fragWpos.z)) < MAX_RANGE) {
-            sample_result += length(sample_kernel[i])*nmlcheck;
+            sample_result += length(sample_kernel[i])*nmlcheck / MAX_SAMPLE_RADIUS;
         }    
 
     }

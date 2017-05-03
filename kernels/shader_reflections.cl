@@ -27,22 +27,26 @@ kernel void shader_reflections(global FragmentColour* fragment_buffer_colour,
         return;
     }
 
-    // Do stuff
-    //float3 camdir_v = (float3)(camdir.x, camdir.y, camdir.z);
-    float3 world_pos = (float3)(fragWpos.x, fragWpos.y, fragWpos.z);
-    float3 cam_pos = (float3)(campos.x, campos.y, campos.z);
-
-    float3 view_vec = world_pos - cam_pos;
-    float3 normal_v = (float3)(fragNml.nx, fragNml.ny, fragNml.nz);
-    view_vec = normalize(view_vec);
-    normal_v = normalize(normal_v);
-    float3 refl_vec = view_vec - 2.0f*dot(view_vec, normal_v)*normal_v;
-    
-   // float3 refl_vec = reflect((float3)(camdir.x, camdir.y, camdir.z), (float3)(fragNml.nx, fragNml.ny, fragNml.nz));
-    Colour result = textureCube(reflection_map, refl_vec, fragTX);
-
     // Write out result
     if (fragFX.reflection_val > 0.0f) {
+        /*
+            If surface is reflective, we calculate the reflection vector and sample the cubemap
+        
+        */
+        // Calculate reflection vector
+        float3 world_pos = (float3)(fragWpos.x, fragWpos.y, fragWpos.z);
+        float3 cam_pos = (float3)(campos.x, campos.y, campos.z);
+
+        float3 view_vec = world_pos - cam_pos;
+        float3 normal_v = (float3)(fragNml.nx, fragNml.ny, fragNml.nz);
+        view_vec = normalize(view_vec);
+        normal_v = normalize(normal_v);
+        float3 refl_vec = view_vec - 2.0f*dot(view_vec, normal_v)*normal_v;
+    
+        // Sample cubemap for result
+        Colour result = textureCube(reflection_map, refl_vec, fragTX);
+
+    
         fragCol.r = result.r*fragFX.reflection_val + fragCol.r*(1.0f- fragFX.reflection_val);
         fragCol.g = result.g*fragFX.reflection_val + fragCol.g*(1.0f - fragFX.reflection_val);
         fragCol.b = result.b*fragFX.reflection_val + fragCol.b*(1.0f - fragFX.reflection_val);

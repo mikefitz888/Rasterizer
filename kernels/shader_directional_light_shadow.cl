@@ -12,12 +12,14 @@
 #define PCF_SAMPLE_RADIUS 1
 
 kernel void shader_directional_light_shadow(
-                global FragmentWPos* fragment_buffer_wpos,
-                global FragmentNormal* fragment_buffer_normal,
-                global FragmentColour* fragment_buffer_col,
-                global FragmentTData* fragment_buffer_tdata,
+                 global FragmentWPos* fragment_buffer_wpos,
+                 global FragmentNormal* fragment_buffer_normal,
+                 global FragmentColour* fragment_buffer_col,
+                 global FragmentTData* fragment_buffer_tdata,
+                 global FragmentFX* fragment_buffer_fx,
                  global FragmentWPos* light_buffer_wpos,
                  global FragmentColour* shadow_buffer_colour,
+                
                  mat4 LIGHT_VIEW_PROJECTION_MATRIX,
                  int sb_width, 
                  int sb_height,
@@ -40,6 +42,7 @@ kernel void shader_directional_light_shadow(
     FragmentNormal fragNml  = fragment_buffer_normal[id];
     FragmentColour frag     = fragment_buffer_col[id];
     FragmentTData  fragTD   = fragment_buffer_tdata[id];
+    FragmentFX     fragFX   = fragment_buffer_fx[id];
     FragmentColour shadow_result;
 
     // Discard un-rendered fragments
@@ -110,7 +113,7 @@ kernel void shader_directional_light_shadow(
     // Divide result
     accum_result /= PCF_SAMPLES*PCF_SAMPLES;
     accum_result = 1.0f - accum_result;
-    float accum_result_f = clamp(accum_result + 0.15f, 0.0f, 1.0f); // Make shadows non black
+    float accum_result_f = clamp(accum_result + 0.35f, 0.0f, 1.0f); // Make shadows non black
 
     /// --- Directional lighting
     float3 N = (float3)(fragNml.nx, fragNml.ny, fragNml.nz); // Surface normal [WORLD SPACE]
@@ -135,7 +138,7 @@ kernel void shader_directional_light_shadow(
 
     //float3 R = reflect(L, N);
     //float3 V = normalize(vertex);
-    float spec = pow(max(dot(N, halfwayVector), 0.0f), 256.0f/*lerp(1.0, 512.0, 0.5f)*/);
+    float spec = pow(max(dot(N, halfwayVector), 0.0f), 1.0f+511.0f*fragFX.glossiness);
 
     // We use frag.a to store specularity for the fragment buffer
     shadow_result.a = (int)(accum_result*spec*255.0f *  (float)(frag.a/255.0f));//(int)(128.0f* accum_result);

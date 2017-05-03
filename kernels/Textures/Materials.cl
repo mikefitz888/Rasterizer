@@ -14,6 +14,7 @@ typedef struct __attribute__((packed)) {
     float specularity;
     float glossiness;
     float reflectivity;
+    float offset_strength;
     float r;
     float g;
     float b;

@@ -106,6 +106,7 @@ struct GPUMaterial {
     float specularity = 0.0f;
     float glossiness = 0.0f;
     float reflectivity = 0.0f;
+    float offset_strength = 1.0f;
     float r, g, b;
 };
 
@@ -119,6 +120,7 @@ struct Material {
     float specularity = 0.0f;
     float glossiness = 0.0f;
     float reflectivity = 0.0f;
+    float offset_strength = 1.0f;
     float r=0.0f, g = 0.0f, b = 0.0f;
 
     // GPU Material 

@@ -189,6 +189,7 @@ void RENDER::allocateOCLBuffers() {
 
     Texture* concrete_diffuse = new Texture("Resources/concrete_diffuse.bmp", context, queue);
     Texture* concrete_normal = new Texture("Resources/concrete_normal.bmp", context, queue);
+    Texture* concrete_specular = new Texture("Resources/concrete_specular.bmp", context, queue);
 
 
     cubemap = new Texture("Resources/cubemap.bmp", context, queue);
@@ -200,7 +201,7 @@ void RENDER::allocateOCLBuffers() {
     materials[MaterialType::TILED_FLOOR].specular_texture  = specular_map;
 
     materials[MaterialType::TILED_FLOOR].specularity  = 1.0f;
-    materials[MaterialType::TILED_FLOOR].glossiness   = 1.0f;
+    materials[MaterialType::TILED_FLOOR].glossiness   = 0.25f;
     materials[MaterialType::TILED_FLOOR].reflectivity = 0.0f;
 
     // Cargo Metal
@@ -208,18 +209,19 @@ void RENDER::allocateOCLBuffers() {
     materials[MaterialType::CARGO_METAL].normalmap_texture = cargo_tex_normal;
     materials[MaterialType::CARGO_METAL].specular_texture = cargo_tex_specular;
 
-    materials[MaterialType::CARGO_METAL].specularity = 0.5f;
-    materials[MaterialType::CARGO_METAL].glossiness = 1.0f;
-    materials[MaterialType::CARGO_METAL].reflectivity = 0.5f;
+    materials[MaterialType::CARGO_METAL].specularity = 0.75f;
+    materials[MaterialType::CARGO_METAL].glossiness = 0.55f;
+    materials[MaterialType::CARGO_METAL].reflectivity = 0.15f;
+    materials[MaterialType::CARGO_METAL].offset_strength = 1.0f;
 
     // Concrete floor
     materials[MaterialType::CONCRETE_FLOOR].diffuse_texture = concrete_diffuse;
     materials[MaterialType::CONCRETE_FLOOR].normalmap_texture = concrete_normal;
-    materials[MaterialType::CONCRETE_FLOOR].specular_texture = cargo_tex_specular;
+    materials[MaterialType::CONCRETE_FLOOR].specular_texture = concrete_specular;
 
-    materials[MaterialType::CONCRETE_FLOOR].specularity = 0.35f;
+    materials[MaterialType::CONCRETE_FLOOR].specularity = 0.85f;
     materials[MaterialType::CONCRETE_FLOOR].glossiness = 1.0f;
-    materials[MaterialType::CONCRETE_FLOOR].reflectivity = 0.10f;
+    materials[MaterialType::CONCRETE_FLOOR].reflectivity = 0.50f;
 
 
     // Allocate Materials buffer
@@ -841,7 +843,7 @@ void RENDER::calculateSSAO(FrameBuffer* in_frame_buffer, FrameBuffer* out_ssao_b
 void RENDER::buildSSAOSampleKernel(int sample_num) {
     glm::vec3* sample_kernel = new glm::vec3[sample_num];
 
-    const int SAMPLE_RADIUS = 1.25f;
+    const int SAMPLE_RADIUS = 2.25f;
 
     for (int i = 0; i < sample_num; i++) {
         sample_kernel[i] = glm::linearRand(glm::vec3(-1.0f, -1.0f, -1.0f), glm::vec3(1.0f, 1.0f, 1.0f));
@@ -889,17 +891,18 @@ void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_ligh
     kernels["shader_directional_light_shadow"]->setArg(1, *in_frame_buffer->getGPUBuffer_normal());
     kernels["shader_directional_light_shadow"]->setArg(2, *in_frame_buffer->getGPUBuffer_colour());
     kernels["shader_directional_light_shadow"]->setArg(3, *in_frame_buffer->getGPUBuffer_tdata());
-    
-    kernels["shader_directional_light_shadow"]->setArg(4, *in_light_buffer->getGPUBuffer_wpos());
-    kernels["shader_directional_light_shadow"]->setArg(5, *out_shadow_buffer->getGPUBuffer_colour());
-    kernels["shader_directional_light_shadow"]->setArg(6, sizeof(cl_float) * 16, glm::value_ptr(LIGHT_MVP_MATRIX));
+    kernels["shader_directional_light_shadow"]->setArg(4, *in_frame_buffer->getGPUBuffer_fx());
+
+    kernels["shader_directional_light_shadow"]->setArg(5, *in_light_buffer->getGPUBuffer_wpos());
+    kernels["shader_directional_light_shadow"]->setArg(6, *out_shadow_buffer->getGPUBuffer_colour());
+    kernels["shader_directional_light_shadow"]->setArg(7, sizeof(cl_float) * 16, glm::value_ptr(LIGHT_MVP_MATRIX));
 
     int sw = SHADOW_WIDTH;
     int sh = SHADOW_HEIGHT;
-    kernels["shader_directional_light_shadow"]->setArg(7, sizeof(int), &sw);
-    kernels["shader_directional_light_shadow"]->setArg(8, sizeof(int), &sh);
-    kernels["shader_directional_light_shadow"]->setArg(9, sizeof(cl_float)*3, &campos);
-    kernels["shader_directional_light_shadow"]->setArg(10, sizeof(cl_float)*3, &lightdir);
+    kernels["shader_directional_light_shadow"]->setArg(8, sizeof(int), &sw);
+    kernels["shader_directional_light_shadow"]->setArg(9, sizeof(int), &sh);
+    kernels["shader_directional_light_shadow"]->setArg(10, sizeof(cl_float)*3, &campos);
+    kernels["shader_directional_light_shadow"]->setArg(11, sizeof(cl_float)*3, &lightdir);
 
     
 
@@ -1203,6 +1206,7 @@ void Material::prepareGPUMaterial() {
     this->gpumaterial.specularity = specularity;
     this->gpumaterial.glossiness = glossiness;
     this->gpumaterial.reflectivity = reflectivity;
+    this->gpumaterial.offset_strength = offset_strength;
     this->gpumaterial.r = r;
     this->gpumaterial.g = g;
     this->gpumaterial.b = b;

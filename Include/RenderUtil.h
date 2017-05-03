@@ -20,6 +20,9 @@
 #include <cstring>
 #include "textures.h"
 
+// Materials
+enum MaterialType : unsigned int { TILED_FLOOR, CARGO_METAL, SUBWAY_POSTER, __MATERIALS_MAX };
+
 union ufvec4 {
     glm::vec4 f;
     glm::vec4 i;
@@ -93,34 +96,39 @@ struct PixelTX {
     float dudx, dvdx, dudy, dvdy;
 };
 
-struct Material {
-    // Textures
-    Texture* diffuse_texture;
-    Texture* normalmap_texture;
-    Texture* specular_texture;
-
-    // Material properties
-    float specularity = 0.0f;
-    float glossiness = 0.0f;
-    float reflectivity = 0.0f;
-    float r, g, b, a;
-};
 
 struct GPUMaterial {
 
-    // Material textures
-    cl::Buffer* diffuse_texture;
-    cl::Buffer* normalmap_texture;
-    cl::Buffer* specular_texture;
+    // Material properties
+    float specularity = 0.0f;
+    float glossiness = 0.0f;
+    float reflectivity = 0.0f;
+    float r, g, b;
+};
+
+struct Material {
+    // Textures
+    Texture* diffuse_texture = nullptr;
+    Texture* normalmap_texture = nullptr;
+    Texture* specular_texture = nullptr;
 
     // Material properties
     float specularity = 0.0f;
     float glossiness = 0.0f;
     float reflectivity = 0.0f;
+    float r=0.0f, g = 0.0f, b = 0.0f;
 
-    // GPU Material
-    GPUMaterial* gpu_material;
+    // GPU Material 
+    GPUMaterial gpumaterial;
+
+    // Functions
+    /*Material(Texture* diffuse_texture, Texture* normalmap_texture, Texture* specular_texture,
+             float specularity, float glossiness, float reflectivity, float r, float g, float b );*/
+
+    void prepareGPUMaterial();
+
 };
+
 
 struct AABB {
     int minX, minY, maxX, maxY;
@@ -184,12 +192,13 @@ class RENDER {
     static cl::Buffer* triangle_buff;
     static cl::Buffer* screen_space_buff;
     static cl::Buffer* material_buffer;
+    static cl::Buffer*  material_buffer_properties;
     static cl::Buffer* aabb_buffer;
     static cl::Buffer* triangle_buf_alldata;
 
     static std::vector<Triangle*> triangle_refs;
     static triplet* triangles;
-    static Material* materials;
+    //static Material* materials;
 
     static cl::Device* device;
     static cl::Context* context;

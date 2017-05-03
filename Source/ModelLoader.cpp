@@ -22,7 +22,7 @@ namespace model {
 		}
 	}
 
-    std::vector<Triangle>& Scene::getTrianglesRef() { /* return triangles;*/return *(models[0]->getFaces()); }
+    std::vector<Triangle>& Scene::getTrianglesRef() { return triangles;/*return *(models[0]->getFaces());*/ }
 
 	Model::Model(std::string file_name) {
 		std::string token;
@@ -130,13 +130,13 @@ namespace model {
 				std::istringstream stream(line);
 				stream >> token;
 
-				Material m;
-				if (materials.size()) { m = getActiveMaterial(); }
+				OBJMaterial m;
+				//if (materials.size()) { m = getActiveMaterial(); }
 				if(token[0] == '#') continue; //skip comments
 				else if (token == "newmtl") {
 					std::string name;
 					stream >> name;
-					materials.push_back(Material());
+					materials.push_back(OBJMaterial());
 					material_map.insert(std::pair<std::string, unsigned int>(name, materials.size()-1));
 				}
 				else if (token == "Ka") stream >> m.ambient_color.x >> m.ambient_color.y >> m.ambient_color.z; //ambient color

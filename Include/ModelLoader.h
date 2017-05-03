@@ -10,9 +10,8 @@
 #include <iostream>
 #include <sstream>
 #include <map>
-
 namespace model {
-	class Model;
+	//class Model;
 
 	enum LTYPE : unsigned int {POINT=0};
 	struct LightSource {
@@ -23,46 +22,20 @@ namespace model {
 		inline LightSource(glm::vec3 p, glm::vec3 d, float i = 1.0f, LTYPE t = LTYPE::POINT) : position(p), direction(d), intensity(i), type(t) {}
 	};
 
-	struct Scene {
-	private:
-		std::vector<Triangle> triangles;
-	public:
-		std::vector<Model*> models;
-		std::vector<LightSource*> light_sources;
-		void getTriangles(std::vector<Triangle>& triangles);
 	
-        std::vector<Triangle>& getTrianglesRef();
-		inline void addModel(Model* model) {
-			models.emplace_back(model);
-		}
 
-		inline void addLight(LightSource& light) {
-			light_sources.emplace_back(&light);
-		}
-
-		inline void removeFront() {
-			triangles.erase(triangles.begin(), triangles.begin() + 2);
-		}
-
-		inline void addTriangles(std::vector<Triangle>& ts) {
-			for (auto& t : ts) {
-				triangles.push_back(t);
-			}
-		}
-	};
-
-	class Material {
+	class OBJMaterial {
 	public:
 		glm::vec3 ambient_color, diffuse_color, specular_color;
 		float specular_exponent, transparency;
 		bitmap_image* ambient_map, diffuse_map, specular_map, bump_map; 
-		inline Material() {};
+		inline OBJMaterial() {};
 	};
 
 	class Model {
-		std::vector<Material> materials;
+		std::vector<OBJMaterial> materials;
 		std::map<std::string, unsigned int> material_map;
-		unsigned int active_material;
+	    unsigned int active_material = 0;
 		bool modified = true;
 
 		std::vector<unsigned int> vertexIndices, textureIndices, normalIndices;
@@ -82,9 +55,15 @@ namespace model {
 		Model(std::string file_name);
 		inline Model() {};
 
-		inline Material& getActiveMaterial(){
-			return materials[active_material];
+		inline unsigned int getActiveMaterial(){
+            return active_material;
 		}
+        inline void setActiveMaterial(unsigned int material_id) {
+            this->active_material = material_id;
+            for (Triangle& t : *this->getFaces()) {
+                t.setMaterialID(material_id);
+            }
+        }
 
 		inline void removeFront() {
 			triangles.erase(triangles.begin(), triangles.begin() + 2);
@@ -116,6 +95,35 @@ namespace model {
 			return &triangles;
 		}
 	};
+
+    struct Scene {
+    private:
+        std::vector<Triangle> triangles;
+    public:
+        std::vector<Model*> models;
+        std::vector<LightSource*> light_sources;
+        void getTriangles(std::vector<Triangle>& triangles);
+
+        std::vector<Triangle>& getTrianglesRef();
+        inline void addModel(Model* model) {
+            models.emplace_back(model);
+            this->addTriangles(*model->getFaces());
+        }
+
+        inline void addLight(LightSource& light) {
+            light_sources.emplace_back(&light);
+        }
+
+        inline void removeFront() {
+            triangles.erase(triangles.begin(), triangles.begin() + 2);
+        }
+
+        inline void addTriangles(std::vector<Triangle>& ts) {
+            for (auto& t : ts) {
+                triangles.push_back(t);
+            }
+        }
+    };
 }
 
 #endif // !MODELLOADER_H

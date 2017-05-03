@@ -27,6 +27,9 @@ public:
 	glm::vec3 color;
     float transparency = 1.0;
 
+    // Material
+    int material_id = 0;
+
     inline Triangle() {};
 
 	inline Triangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
@@ -91,6 +94,14 @@ public:
 		barycentric_coordinates.z = glm::length(glm::cross(factorA, factorB)) / area;
 		return barycentric_coordinates;
 	}
+
+    inline void setMaterialID(int id) {
+        this->material_id = id;
+    }
+
+    inline int getMaterialID() {
+        return this->material_id;
+    }
 };
 
 struct Intersection {

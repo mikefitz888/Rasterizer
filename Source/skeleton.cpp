@@ -67,6 +67,7 @@ void Draw(model::Scene& scene);
 glm::vec2 project2D(glm::vec3 point);
 void Interpolate(glm::ivec2 a, glm::ivec2 b, vector<glm::ivec2>& result);
 
+
 int main( int argc, char* argv[] )
 {
     
@@ -81,8 +82,10 @@ int main( int argc, char* argv[] )
     model::Scene scene;
     //scene.addTriangles(model);p
     
-    //RENDER::addTriangle(scene.getTrianglesRef()[0]);
+    // LOAD TRAINSTATION MODEL AND SET MATERIAL ID
     model::Model m("trainstation.obj");
+    m.setActiveMaterial(MaterialType::CARGO_METAL);
+
     scene.addModel(&m);
 
     if( scene.getTrianglesRef().size() == 0){
@@ -103,7 +106,7 @@ int main( int argc, char* argv[] )
    // FrameBuffer* lighting_buffer = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
 
     // Generate SSAO Kernel
-    int sample_count = 128;
+    int sample_count = 96;
     RENDER::buildSSAOSampleKernel(sample_count);
 
     // Generate a buffer to store lighting in

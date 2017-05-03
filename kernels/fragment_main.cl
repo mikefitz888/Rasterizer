@@ -1,4 +1,5 @@
 #include "kernels/Textures/Textures.cl"
+#include "kernels/Textures/Materials.cl"
 #include "kernels/Utility/Matrix.cl"
 
 typedef struct __attribute__((packed)) {
@@ -24,6 +25,9 @@ typedef struct __attribute__((packed)) {
     vec3 color;
     float transparency;
 
+    // Material
+    int material_id;
+
 } Triangle;
 
 
@@ -38,9 +42,11 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
 
 
                           global Triangle* triangle_buffer_all, 
-                          global Colour* default_tex, 
+                          /*global Colour* default_tex, 
                           global Colour* normal_tex,
-                          global Colour* specular_tex,
+                          global Colour* specular_tex,*/
+                          global Colour* material_textures,
+                          global MaterialProperties* material_properties,
                           int screen_width, 
                           int screen_height){
 
@@ -55,6 +61,9 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
 
     uint td = fragTdata.triangle_id;
     Triangle t = triangle_buffer_all[td];
+
+    // Pull material properties
+    MaterialProperties mp = material_properties[t.material_id];
 
     if (fragTdata.depth == 0) {
         fragCol.r = 0;
@@ -125,8 +134,8 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     /// ---------------------------------------------------------- ///
     // BILINEAR FILTERING
     // Tmp calculate aniso factor 
-    Colour tex_col = texture2D_bilinear(default_tex, fragTX.uvx, fragTX.uvy, fragTX);
-    //Colour tex_col = texture2D_LOD(default_tex, frag.uvx, frag.uvy, 0);
+    Colour tex_col = texture2D_bilinear(material_textures, t.material_id, 0, fragTX.uvx, fragTX.uvy, fragTX);
+    //Colour tex_col = texture2D_LOD(materials, 0, 0, fragTX.uvx, fragTX.uvy, 0);
     fragCol.r = tex_col.r;
     fragCol.g = tex_col.g;
     fragCol.b = tex_col.b;
@@ -142,11 +151,13 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
         https://learnopengl.com/#!Advanced-Lighting/Normal-Mapping
     */
     // Specular
-    Colour spec_col = texture2D_bilinear(specular_tex, fragTX.uvx, fragTX.uvy, fragTX);
-    fragCol.a = spec_col.r;
+    Colour spec_col = texture2D_bilinear(material_textures, t.material_id, 2, fragTX.uvx, fragTX.uvy, fragTX);
+   // Colour spec_col = texture2D_LOD(materials, 0, 2, fragTX.uvx, fragTX.uvy, 0);
+    fragCol.a = spec_col.r*mp.specularity;
 
     // Normal mapping
-    Colour norm_col = texture2D_bilinear(normal_tex, fragTX.uvx, fragTX.uvy, fragTX);
+    Colour norm_col = texture2D_bilinear(material_textures, t.material_id, 1, fragTX.uvx, fragTX.uvy, fragTX);
+    //Colour norm_col = texture2D_LOD(materials, 0, 1, fragTX.uvx, fragTX.uvy, 0);
     float3 normal_t = (float3)(((float)norm_col.r / 255.0f)*2.0f - 1.0f,
                              ((float)norm_col.g / 255.0f)*2.0f - 1.0f,
                              ((float)norm_col.b / 255.0f)*2.0f - 1.0f);

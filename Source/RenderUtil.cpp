@@ -4,8 +4,9 @@
 cl::Buffer* RENDER::triangle_buff;
 cl::Buffer* RENDER::triangle_buf_alldata;
 cl::Buffer* RENDER::screen_space_buff;
-cl::Buffer* RENDER::material_buffer;
 cl::Buffer* RENDER::aabb_buffer;
+cl::Buffer* RENDER::material_buffer;
+cl::Buffer* RENDER::material_buffer_properties;
 
 cl::Buffer* RENDER::ssao_sample_kernel;
 int RENDER::sample_count = 0;
@@ -13,7 +14,6 @@ glm::vec3* RENDER::ssao_sample_kernel_vals;
 
 std::vector<Triangle*> RENDER::triangle_refs;
 triplet* RENDER::triangles;
-Material* RENDER::materials;
 AABB* RENDER::local_aabb_buff;
 
 cl::Device* RENDER::device;
@@ -26,6 +26,11 @@ std::map<std::string, cl::Kernel*> RENDER::kernels;
 Texture* default_tex;
 Texture* normal_map;
 Texture* specular_map;
+
+
+// Material array
+Material materials[MaterialType::__MATERIALS_MAX];
+
 
 bool RENDER::scene_changed = false;
 bool USING_GPU = false;
@@ -163,35 +168,60 @@ void RENDER::createOCLCommandQueue() {
 
 void RENDER::allocateOCLBuffers() {
     //TODO: move these to a map for better organisation
-    //frame_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     triangle_buff = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(triplet) * triangle_refs.size());
     triangle_buf_alldata = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Triangle) * triangle_refs.size());
 
     screen_space_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(triplet) * triangle_refs.size());
-    material_buffer = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Material) * triangle_refs.size());
     aabb_buffer = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(AABB) * triangle_refs.size());
-
-    // SSAO
-    //ssao_buff = new cl::Buffer(*context, CL_MEM_READ_WRITE, sizeof(Pixel) * SCREEN_WIDTH * SCREEN_HEIGHT);
     
     // LOAD TEXTURES:
     //std::string str = "Resource/T1.bmp";
     default_tex  = new Texture("Resources/T1.bmp", context, queue);
     normal_map   = new Texture("Resources/N1.bmp", context, queue);
     specular_map = new Texture("Resources/S1.bmp", context, queue);
+
+
+    Texture* cargo_tex_diffuse  = new Texture("Resources/Cargo_diffuse.bmp", context, queue);
+    Texture* cargo_tex_normal   = new Texture("Resources/Cargo_normal.bmp", context, queue);
+    Texture* cargo_tex_specular = new Texture("Resources/Cargo_spec.bmp", context, queue);
+
+
+
+    ///// ---------------- PREPARE MATERIALS ---------------- 
+
+    // Tiled floor
+    materials[MaterialType::TILED_FLOOR].diffuse_texture   = default_tex;
+    materials[MaterialType::TILED_FLOOR].normalmap_texture = normal_map;
+    materials[MaterialType::TILED_FLOOR].specular_texture  = specular_map;
+
+    materials[MaterialType::TILED_FLOOR].specularity  = 1.0f;
+    materials[MaterialType::TILED_FLOOR].glossiness   = 1.0f;
+    materials[MaterialType::TILED_FLOOR].reflectivity = 0.0f;
+
+    // Cargo Metal
+    materials[MaterialType::CARGO_METAL].diffuse_texture = cargo_tex_diffuse;
+    materials[MaterialType::CARGO_METAL].normalmap_texture = cargo_tex_normal;
+    materials[MaterialType::CARGO_METAL].specular_texture = cargo_tex_specular;
+
+    materials[MaterialType::CARGO_METAL].specularity = 0.5f;
+    materials[MaterialType::CARGO_METAL].glossiness = 1.0f;
+    materials[MaterialType::CARGO_METAL].reflectivity = 1.0f;
+
+
+    // Allocate Materials buffer
+    material_buffer            = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Colour) * 349526 * 3 * MaterialType::__MATERIALS_MAX);
+    material_buffer_properties = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(GPUMaterial) * MaterialType::__MATERIALS_MAX);
+
+    std::cout << "MAT BUFF: " << material_buffer << std::endl;
 }
 
 void RENDER::writeTriangles() {
     //May need to modify this to do transfer in multiple steps if memory requirement is too high
     triangles = new triplet[triangle_refs.size()];
-    materials = new Material[triangle_refs.size()];
-    //printf("SIZE = %d\n", triangle_refs.size());
+
     
     for (int i = 0; i < triangle_refs.size(); i++) {
         auto& t = triangle_refs[i];
-        materials[i].r = t->color.r;
-        materials[i].g = t->color.g;
-        materials[i].b = t->color.b;
 
         triangles[i].v0.f = glm::vec4(t->v0.x, t->v0.y, t->v0.z, 1.0f);
         triangles[i].v1.f = glm::vec4(t->v1.x, t->v1.y, t->v1.z, 1.0f);
@@ -209,14 +239,47 @@ void RENDER::writeTriangles() {
         while (1);
     }
 
+    //// -------------- COPY MATERIAL BUFFER TO GPU ------------------------ //
+    // Prepare material buffer
+    Colour *materials_all = new Colour[349526 * 3* MaterialType::__MATERIALS_MAX];
+    GPUMaterial *material_properties_all = new GPUMaterial[MaterialType::__MATERIALS_MAX];
+
+    for (int i = 0; i < MaterialType::__MATERIALS_MAX; i++) {
+        materials[i].prepareGPUMaterial();
+        material_properties_all[i] = materials[i].gpumaterial;
+
+        if (materials[i].diffuse_texture != nullptr) {
+            memcpy(&materials_all[(349526 * 3)*i], materials[i].diffuse_texture->getClTexture(), sizeof(Colour) * 349526);
+        }
+        if (materials[i].normalmap_texture != nullptr) {
+            memcpy(&materials_all[(349526 * 3)*i + 349526], materials[i].normalmap_texture->getClTexture(), sizeof(Colour) * 349526);
+        }
+        if (materials[i].specular_texture != nullptr) {
+            memcpy(&materials_all[(349526 * 3)*i + 349526 * 2], materials[i].specular_texture->getClTexture(), sizeof(Colour) * 349526);
+        }
+    }
+    std::cout << "Copy material buffer to GPU" << std::endl;
+    err = queue->enqueueWriteBuffer(*material_buffer, CL_TRUE, 0, sizeof(Colour)*349526*3* MaterialType::__MATERIALS_MAX, materials_all);
+    if (err != 0) {
+        printf("ERROR %d %d\n", __LINE__, err);
+        while (1);
+    }
+    queue->finish();
+    err = queue->enqueueWriteBuffer(*material_buffer_properties, CL_TRUE, 0, sizeof(GPUMaterial) * MaterialType::__MATERIALS_MAX, material_properties_all);
+    if (err != 0) {
+        printf("ERROR %d %d\n", __LINE__, err);
+        while (1);
+    }
+    queue->finish();
+    std::cout << "Copied material buffer to GPU" << std::endl;
+    // ---------------------------------------------------------------------- //
+
 
     Triangle* triangles_FULL = new Triangle[triangle_refs.size()];
     for (int i = 0; i < triangle_refs.size(); i++) {
         triangles_FULL[i] = *triangle_refs[i];
     }
     err = queue->enqueueWriteBuffer(*triangle_buf_alldata, CL_TRUE, 0, sizeof(Triangle) * triangle_refs.size(), triangles_FULL);
-
-    err = queue->enqueueWriteBuffer(*material_buffer, CL_TRUE, 0, sizeof(Material) * triangle_refs.size(), materials);
     if (err != 0) {
         printf("ERROR %d %d\n", __LINE__, err);
         while (1);
@@ -311,6 +374,9 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     // Dont need to copy this if running rasterization step
     queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
     queue->finish();
+
+
+
     clock_t end = clock();
     double elapsed_secs = 1000*double(end - begin) / CLOCKS_PER_SEC;
     if(VERBOSE) std::cout << "Projection stage: " << elapsed_secs << "ms" << std::endl;
@@ -598,13 +664,15 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     kernels["fragment_main"]->setArg(4, *frame_buffer->getGPUBuffer_tx());
 
     kernels["fragment_main"]->setArg(5, *triangle_buf_alldata);
-    kernels["fragment_main"]->setArg(6, *default_tex->getGPUPtr());
+    /*kernels["fragment_main"]->setArg(6, *default_tex->getGPUPtr());
     kernels["fragment_main"]->setArg(7, *normal_map->getGPUPtr());
-    kernels["fragment_main"]->setArg(8, *specular_map->getGPUPtr());
+    kernels["fragment_main"]->setArg(8, *specular_map->getGPUPtr());*/
+    kernels["fragment_main"]->setArg(6, /**default_tex->getGPUPtr()*/*material_buffer);
+    kernels["fragment_main"]->setArg(7, *material_buffer_properties);
     int swi = WIDTH;
     int shi = HEIGHT;
-    kernels["fragment_main"]->setArg(9, sizeof(int), &swi);
-    kernels["fragment_main"]->setArg(10, sizeof(int), &shi);
+    kernels["fragment_main"]->setArg(8, sizeof(int), &swi);
+    kernels["fragment_main"]->setArg(9, sizeof(int), &shi);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     const cl::NDRange offseta = cl::NDRange(0);
@@ -701,8 +769,8 @@ void RENDER::release() {
     triangle_refs.clear();
 
     delete[] triangles;
-    delete[] materials;
-    delete material_buffer;
+    //delete[] materials;
+    //delete material_buffer;
     //delete frame_buff;
     //delete ssao_buff;
     delete ssao_sample_kernel;
@@ -824,9 +892,6 @@ void RENDER::calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_ligh
     cl_int err = queue->enqueueNDRangeKernel(*kernels["shader_directional_light_shadow"], NULL, screen);
     if (err) { printf("%d Error: %d\n", __LINE__, err); while (1); }
     queue->finish();
-
-    //queue->enqueueReadBuffer(*out_shadow_buffer->getGPUBuffer(), CL_TRUE, 0, sizeof(Pixel) * CAMERA_WIDTH * CAMERA_HEIGHT, out_shadow_buffer->getCPUBuffer());
-    //queue->finish();
 }
 
 // Point lights (Deferred)
@@ -1072,4 +1137,14 @@ void FrameBuffer::transferGPUtoCPU_Normal() {
 void FrameBuffer::transferGPUtoCPU_Tx() {
     RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_tx(), CL_TRUE, 0, sizeof(PixelTX) *this->getWidth()*this->getHeight(), this->getCPUBuffer_tx());
     RENDER::queue->finish();
+}
+
+// MATERIALS
+void Material::prepareGPUMaterial() {
+    this->gpumaterial.specularity = specularity;
+    this->gpumaterial.glossiness = glossiness;
+    this->gpumaterial.reflectivity = reflectivity;
+    this->gpumaterial.r = r;
+    this->gpumaterial.g = g;
+    this->gpumaterial.b = b;
 }

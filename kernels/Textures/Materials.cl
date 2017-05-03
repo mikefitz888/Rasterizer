@@ -10,20 +10,15 @@
 
 typedef struct __attribute__((packed)) {
 
-    // Textures
-    Colour* diffuse_texture;
-    Colour* normalmap_texture;
-    Colour* specular_texture;
-
     // Properties
-    float specularity = 0.0f;
-    float glossiness = 0.0f;
-    float reflectivity = 0.0f;
-    float r = 0.0f;
-    float g = 0.0f;
-    float b = 0.0f;
+    float specularity;
+    float glossiness;
+    float reflectivity;
+    float r;
+    float g;
+    float b;
 
-} Material;
+} MaterialProperties;
 
 
 

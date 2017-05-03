@@ -131,7 +131,7 @@ namespace model {
 				stream >> token;
 
 				OBJMaterial m;
-				if (materials.size()) { m = getActiveMaterial(); }
+				//if (materials.size()) { m = getActiveMaterial(); }
 				if(token[0] == '#') continue; //skip comments
 				else if (token == "newmtl") {
 					std::string name;

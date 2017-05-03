@@ -1,6 +1,14 @@
 #ifndef _TEXTURES_H
 #define _TEXTURES_H
 
+// Colour
+typedef struct __attribute__((packed)) {
+    uchar r, g, b, a;
+} Colour;
+
+
+#include "Materials.cl"
+
 // ---------------------------------------------- //
 // Mip level constant
 /*
@@ -59,13 +67,10 @@ typedef struct __attribute__((packed, aligned(4))) {
 
 
 
-// Colour
-typedef struct __attribute__((packed)) {
-    uchar r, g, b, a;
-} Colour;
 
 // Same function with LOD level specified
-inline Colour texture2D_LOD(global Colour* tex, float uvx, float uvy, int LOD_level) {
+// Texture type (0-diffuse, 1-normal, 2-specular)
+inline Colour texture2D_LOD(global Colour* mat, uint material_id, uint texture_type, float uvx, float uvy, int LOD_level) {
     // Determine size
     int size = 512>>LOD_level;
 
@@ -78,23 +83,23 @@ inline Colour texture2D_LOD(global Colour* tex, float uvx, float uvy, int LOD_le
 
     // TEXTURE MODE (always assume wrapping)
     //TODO: Improve to avoid negative modulo
-    uvx_i = (uvx_i) % size;
-    uvy_i = (uvy_i) % size;
+    uvx_i = (uvx_i + 1073741824) % size;
+    uvy_i = (uvy_i + 1073741824) % size;
 
     // Sample texture
     // TODO: Incorperate texture filtering
     int LOD_offset = _MIP_LV_OFFSETS[LOD_level];
     int sample_index = (uvx_i + uvy_i*size) + LOD_offset;
     if (sample_index < LOD_offset || sample_index >= LOD_offset+size*size) {
-        printf("SAMPLING INDEX ERROR!! \n"); // Need a more elegant way of handling n
+       // printf("SAMPLING INDEX ERROR!! \n"); // Need a more elegant way of handling n
         Colour c;
-        return c;
+        //return c;
     }
-    return tex[sample_index];
+    return mat[sample_index + (material_id * 3 + texture_type) * 349526];
 }
 
-inline Colour texture2D_NN(global Colour* tex, float uvx, float uvy) {
-    return texture2D_LOD(tex, uvx, uvy, 0);
+inline Colour texture2D_NN(global Colour* mat, uint material_id, uint texture_type, float uvx, float uvy) {
+    return texture2D_LOD(mat, material_id, texture_type, uvx, uvy, 0);
 }
 
 // Texture filtering
@@ -105,7 +110,7 @@ inline Colour texture2D_NN(global Colour* tex, float uvx, float uvy) {
     It blends the values of the pixel based on the offset ratio between the pixel
 
 */
-inline Colour texture2D_bilinear(global Colour* tex, float uvx, float uvy, FragmentTX frag) {
+inline Colour texture2D_bilinear(global Colour* mat, uint material_id, uint texture_type, float uvx, float uvy, FragmentTX frag) {
 
     float px = sqrt(frag.dudx*frag.dudx + frag.dvdx*frag.dvdx);
     float py = sqrt(frag.dudy*frag.dudy + frag.dvdy*frag.dvdy);
@@ -141,10 +146,10 @@ inline Colour texture2D_bilinear(global Colour* tex, float uvx, float uvy, Fragm
 
     // Sample multiple points
     int LOD_offset = _MIP_LV_OFFSETS[LOD_level];
-    Colour c1 = tex[LOD_offset + uvx_i  + uvy_i*size];
-    Colour c2 = tex[LOD_offset + uvx1_i + uvy_i*size];
-    Colour c3 = tex[LOD_offset + uvx_i  + uvy1_i*size];
-    Colour c4 = tex[LOD_offset + uvx1_i + uvy1_i*size];
+    Colour c1 = mat[LOD_offset + uvx_i  + uvy_i*size + (material_id*3+texture_type) * 349526];
+    Colour c2 = mat[LOD_offset + uvx1_i + uvy_i*size + (material_id * 3 + texture_type) * 349526];
+    Colour c3 = mat[LOD_offset + uvx_i  + uvy1_i*size + (material_id * 3 + texture_type) * 349526];
+    Colour c4 = mat[LOD_offset + uvx1_i + uvy1_i*size + (material_id * 3 + texture_type) * 349526];
 
     // Calculate result colour
     Colour result;

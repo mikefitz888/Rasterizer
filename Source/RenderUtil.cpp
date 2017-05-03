@@ -5,6 +5,7 @@ cl::Buffer* RENDER::triangle_buff;
 cl::Buffer* RENDER::triangle_buf_alldata;
 cl::Buffer* RENDER::screen_space_buff;
 cl::Buffer* RENDER::aabb_buffer;
+cl::Buffer* RENDER::material_buffer;
 
 cl::Buffer* RENDER::ssao_sample_kernel;
 int RENDER::sample_count = 0;
@@ -24,6 +25,11 @@ std::map<std::string, cl::Kernel*> RENDER::kernels;
 Texture* default_tex;
 Texture* normal_map;
 Texture* specular_map;
+
+
+// Material array
+Material materials[MaterialType::__MATERIALS_MAX];
+
 
 bool RENDER::scene_changed = false;
 bool USING_GPU = false;
@@ -172,6 +178,26 @@ void RENDER::allocateOCLBuffers() {
     default_tex  = new Texture("Resources/T1.bmp", context, queue);
     normal_map   = new Texture("Resources/N1.bmp", context, queue);
     specular_map = new Texture("Resources/S1.bmp", context, queue);
+
+
+
+
+
+    ///// ---------------- PREPARE MATERIALS ---------------- 
+
+    // Tiled floor
+    materials[MaterialType::TILED_FLOOR].diffuse_texture   = default_tex;
+    materials[MaterialType::TILED_FLOOR].normalmap_texture = normal_map;
+    materials[MaterialType::TILED_FLOOR].specular_texture  = specular_map;
+
+    materials[MaterialType::TILED_FLOOR].specularity  = 1.0f;
+    materials[MaterialType::TILED_FLOOR].glossiness   = 1.0f;
+    materials[MaterialType::TILED_FLOOR].reflectivity = 0.0f;
+
+
+    // Allocate Materials buffer
+    material_buffer = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Colour) * 349526 * 3 * MaterialType::__MATERIALS_MAX);
+    std::cout << "MAT BUFF: " << material_buffer << std::endl;
 }
 
 void RENDER::writeTriangles() {
@@ -197,6 +223,30 @@ void RENDER::writeTriangles() {
         printf("ERROR %d %d\n", __LINE__, err);
         while (1);
     }
+
+    //// -------------- COPY MATERIAL BUFFER TO GPU ------------------------ //
+    // Prepare material buffer
+    Colour *materials_all = new Colour[349526 * 3* MaterialType::__MATERIALS_MAX];
+    for (int i = 0; i < /*MaterialType::__MATERIALS_MAX*/1; i++) {
+        if (materials[i].diffuse_texture != nullptr) {
+            memcpy(&materials_all[(349526 * 3)*i], materials[i].diffuse_texture->getClTexture(), sizeof(Colour) * 349526);
+        }
+        if (materials[i].normalmap_texture != nullptr) {
+            memcpy(&materials_all[(349526 * 3)*i + 349526], materials[i].normalmap_texture->getClTexture(), sizeof(Colour) * 349526);
+        }
+        if (materials[i].specular_texture != nullptr) {
+            memcpy(&materials_all[(349526 * 3)*i + 349526 * 2], materials[i].specular_texture->getClTexture(), sizeof(Colour) * 349526);
+        }
+    }
+    std::cout << "Copy material buffer to GPU" << std::endl;
+    err = queue->enqueueWriteBuffer(*material_buffer, CL_TRUE, 0, sizeof(Colour)*349526*3* MaterialType::__MATERIALS_MAX, materials_all);
+    if (err != 0) {
+        printf("ERROR %d %d\n", __LINE__, err);
+        while (1);
+    }
+    queue->finish();
+    std::cout << "Copied material buffer to GPU" << std::endl;
+    // ---------------------------------------------------------------------- //
 
 
     Triangle* triangles_FULL = new Triangle[triangle_refs.size()];
@@ -298,6 +348,9 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     // Dont need to copy this if running rasterization step
     queue->enqueueReadBuffer(*screen_space_buff, CL_TRUE, 0, sizeof(triplet) * triangle_refs.size(), triangles);
     queue->finish();
+
+
+
     clock_t end = clock();
     double elapsed_secs = 1000*double(end - begin) / CLOCKS_PER_SEC;
     if(VERBOSE) std::cout << "Projection stage: " << elapsed_secs << "ms" << std::endl;
@@ -518,13 +571,14 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     kernels["fragment_main"]->setArg(4, *frame_buffer->getGPUBuffer_tx());
 
     kernels["fragment_main"]->setArg(5, *triangle_buf_alldata);
-    kernels["fragment_main"]->setArg(6, *default_tex->getGPUPtr());
+    /*kernels["fragment_main"]->setArg(6, *default_tex->getGPUPtr());
     kernels["fragment_main"]->setArg(7, *normal_map->getGPUPtr());
-    kernels["fragment_main"]->setArg(8, *specular_map->getGPUPtr());
+    kernels["fragment_main"]->setArg(8, *specular_map->getGPUPtr());*/
+    kernels["fragment_main"]->setArg(6, /**default_tex->getGPUPtr()*/*material_buffer);
     int swi = WIDTH;
     int shi = HEIGHT;
-    kernels["fragment_main"]->setArg(9, sizeof(int), &swi);
-    kernels["fragment_main"]->setArg(10, sizeof(int), &shi);
+    kernels["fragment_main"]->setArg(7, sizeof(int), &swi);
+    kernels["fragment_main"]->setArg(8, sizeof(int), &shi);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     const cl::NDRange offseta = cl::NDRange(0);
@@ -989,37 +1043,4 @@ void FrameBuffer::transferGPUtoCPU_Normal() {
 void FrameBuffer::transferGPUtoCPU_Tx() {
     RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_tx(), CL_TRUE, 0, sizeof(PixelTX) *this->getWidth()*this->getHeight(), this->getCPUBuffer_tx());
     RENDER::queue->finish();
-}
-
-// Materials
-Material::Material(Texture* diffuse_texture, Texture* normalmap_texture, Texture* specular_texture,
-         float specularity, float glossiness, float reflectivity, float r = 255.0f, float g = 255.0f, float b = 255.0f) {
-   
-    // Textures
-    this->diffuse_texture = diffuse_texture;
-    this->specular_texture = specular_texture;
-    this->normalmap_texture = normalmap_texture;
-    
-    // Properties
-    this->specularity = specularity;
-    this->glossiness = glossiness;
-    this->reflectivity = reflectivity;
-    this->r = r;
-    this->g = g;
-    this->b = b;
-
-    // Prepare GPU Material
-    prepareGPUMaterial();
-}
-
-void Material::prepareGPUMaterial() {
-    this->gpumaterial.diffuse_texture   = this->diffuse_texture->getGPUPtr();
-    this->gpumaterial.specular_texture  = this->specular_texture->getGPUPtr();
-    this->gpumaterial.normalmap_texture = this->normalmap_texture->getGPUPtr();
-    this->gpumaterial.specularity       = this->specularity;
-    this->gpumaterial.glossiness        = this->glossiness;
-    this->gpumaterial.reflectivity      = this->reflectivity;
-    this->gpumaterial.r = this->r;
-    this->gpumaterial.g = this->g;
-    this->gpumaterial.b = this->b;
 }

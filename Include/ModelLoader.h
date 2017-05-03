@@ -10,7 +10,6 @@
 #include <iostream>
 #include <sstream>
 #include <map>
-
 namespace model {
 	//class Model;
 
@@ -36,7 +35,7 @@ namespace model {
 	class Model {
 		std::vector<OBJMaterial> materials;
 		std::map<std::string, unsigned int> material_map;
-	    unsigned int active_material;
+	    unsigned int active_material = 0;
 		bool modified = true;
 
 		std::vector<unsigned int> vertexIndices, textureIndices, normalIndices;
@@ -56,9 +55,15 @@ namespace model {
 		Model(std::string file_name);
 		inline Model() {};
 
-		inline OBJMaterial& getActiveMaterial(){
-			return materials[active_material];
+		inline unsigned int getActiveMaterial(){
+            return active_material;
 		}
+        inline void setActiveMaterial(unsigned int material_id) {
+            this->active_material = material_id;
+            for (Triangle& t : *this->getFaces()) {
+                t.setMaterialID(material_id);
+            }
+        }
 
 		inline void removeFront() {
 			triangles.erase(triangles.begin(), triangles.begin() + 2);

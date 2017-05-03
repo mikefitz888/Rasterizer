@@ -20,6 +20,9 @@
 #include <cstring>
 #include "textures.h"
 
+// Materials
+enum MaterialType : unsigned int { TILED_FLOOR, CARGO_METAL, SUBWAY_POSTER, __MATERIALS_MAX };
+
 union ufvec4 {
     glm::vec4 f;
     glm::vec4 i;
@@ -96,11 +99,6 @@ struct PixelTX {
 
 struct GPUMaterial {
 
-    // Material textures
-    cl::Buffer* diffuse_texture;
-    cl::Buffer* normalmap_texture;
-    cl::Buffer* specular_texture;
-
     // Material properties
     float specularity = 0.0f;
     float glossiness = 0.0f;
@@ -110,24 +108,23 @@ struct GPUMaterial {
 
 struct Material {
     // Textures
-    Texture* diffuse_texture;
-    Texture* normalmap_texture;
-    Texture* specular_texture;
+    Texture* diffuse_texture = nullptr;
+    Texture* normalmap_texture = nullptr;
+    Texture* specular_texture = nullptr;
 
     // Material properties
     float specularity = 0.0f;
     float glossiness = 0.0f;
     float reflectivity = 0.0f;
-    float r, g, b;
+    float r=0.0f, g = 0.0f, b = 0.0f;
 
     // GPU Material 
     GPUMaterial gpumaterial;
 
     // Functions
-    Material(Texture* diffuse_texture, Texture* normalmap_texture, Texture* specular_texture,
-             float specularity, float glossiness, float reflectivity, float r, float g, float b );
+    /*Material(Texture* diffuse_texture, Texture* normalmap_texture, Texture* specular_texture,
+             float specularity, float glossiness, float reflectivity, float r, float g, float b );*/
 
-private:
     void prepareGPUMaterial();
 
 };
@@ -200,7 +197,7 @@ class RENDER {
 
     static std::vector<Triangle*> triangle_refs;
     static triplet* triangles;
-    static Material* materials;
+    //static Material* materials;
 
     static cl::Device* device;
     static cl::Context* context;

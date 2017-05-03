@@ -43,9 +43,9 @@ kernel void shader_reflections(global FragmentColour* fragment_buffer_colour,
 
     // Write out result
     if (fragFX.reflection_val > 0.0f) {
-        fragCol.r = result.r;
-        fragCol.g = result.g;
-        fragCol.b = result.b;
+        fragCol.r = result.r*fragFX.reflection_val + fragCol.r*(1.0f- fragFX.reflection_val);
+        fragCol.g = result.g*fragFX.reflection_val + fragCol.g*(1.0f - fragFX.reflection_val);
+        fragCol.b = result.b*fragFX.reflection_val + fragCol.b*(1.0f - fragFX.reflection_val);
         fragment_buffer_colour[id] = fragCol;
     }
 

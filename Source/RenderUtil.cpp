@@ -6,6 +6,7 @@ cl::Buffer* RENDER::triangle_buf_alldata;
 cl::Buffer* RENDER::screen_space_buff;
 cl::Buffer* RENDER::aabb_buffer;
 cl::Buffer* RENDER::material_buffer;
+cl::Buffer* RENDER::material_buffer_properties;
 
 cl::Buffer* RENDER::ssao_sample_kernel;
 int RENDER::sample_count = 0;
@@ -196,7 +197,9 @@ void RENDER::allocateOCLBuffers() {
 
 
     // Allocate Materials buffer
-    material_buffer = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Colour) * 349526 * 3 * MaterialType::__MATERIALS_MAX);
+    material_buffer            = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Colour) * 349526 * 3 * MaterialType::__MATERIALS_MAX);
+    material_buffer_properties = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(GPUMaterial) * MaterialType::__MATERIALS_MAX);
+
     std::cout << "MAT BUFF: " << material_buffer << std::endl;
 }
 
@@ -227,7 +230,12 @@ void RENDER::writeTriangles() {
     //// -------------- COPY MATERIAL BUFFER TO GPU ------------------------ //
     // Prepare material buffer
     Colour *materials_all = new Colour[349526 * 3* MaterialType::__MATERIALS_MAX];
+    GPUMaterial *material_properties_all = new GPUMaterial[MaterialType::__MATERIALS_MAX];
+
     for (int i = 0; i < /*MaterialType::__MATERIALS_MAX*/1; i++) {
+        materials[i].prepareGPUMaterial();
+        material_properties_all[i] = materials[i].gpumaterial;
+
         if (materials[i].diffuse_texture != nullptr) {
             memcpy(&materials_all[(349526 * 3)*i], materials[i].diffuse_texture->getClTexture(), sizeof(Colour) * 349526);
         }
@@ -240,6 +248,12 @@ void RENDER::writeTriangles() {
     }
     std::cout << "Copy material buffer to GPU" << std::endl;
     err = queue->enqueueWriteBuffer(*material_buffer, CL_TRUE, 0, sizeof(Colour)*349526*3* MaterialType::__MATERIALS_MAX, materials_all);
+    if (err != 0) {
+        printf("ERROR %d %d\n", __LINE__, err);
+        while (1);
+    }
+    queue->finish();
+    err = queue->enqueueWriteBuffer(*material_buffer_properties, CL_TRUE, 0, sizeof(GPUMaterial) * MaterialType::__MATERIALS_MAX, material_properties_all);
     if (err != 0) {
         printf("ERROR %d %d\n", __LINE__, err);
         while (1);
@@ -575,10 +589,11 @@ void RENDER::renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 
     kernels["fragment_main"]->setArg(7, *normal_map->getGPUPtr());
     kernels["fragment_main"]->setArg(8, *specular_map->getGPUPtr());*/
     kernels["fragment_main"]->setArg(6, /**default_tex->getGPUPtr()*/*material_buffer);
+    kernels["fragment_main"]->setArg(7, *material_buffer_properties);
     int swi = WIDTH;
     int shi = HEIGHT;
-    kernels["fragment_main"]->setArg(7, sizeof(int), &swi);
-    kernels["fragment_main"]->setArg(8, sizeof(int), &shi);
+    kernels["fragment_main"]->setArg(8, sizeof(int), &swi);
+    kernels["fragment_main"]->setArg(9, sizeof(int), &shi);
 
     const cl::NDRange screen = cl::NDRange(WIDTH * HEIGHT);
     const cl::NDRange offseta = cl::NDRange(0);
@@ -1043,4 +1058,14 @@ void FrameBuffer::transferGPUtoCPU_Normal() {
 void FrameBuffer::transferGPUtoCPU_Tx() {
     RENDER::queue->enqueueReadBuffer(*this->getGPUBuffer_tx(), CL_TRUE, 0, sizeof(PixelTX) *this->getWidth()*this->getHeight(), this->getCPUBuffer_tx());
     RENDER::queue->finish();
+}
+
+// MATERIALS
+void Material::prepareGPUMaterial() {
+    this->gpumaterial.specularity = specularity;
+    this->gpumaterial.glossiness = glossiness;
+    this->gpumaterial.reflectivity = reflectivity;
+    this->gpumaterial.r = r;
+    this->gpumaterial.g = g;
+    this->gpumaterial.b = b;
 }

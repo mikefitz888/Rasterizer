@@ -192,6 +192,7 @@ class RENDER {
     static cl::Buffer* triangle_buff;
     static cl::Buffer* screen_space_buff;
     static cl::Buffer* material_buffer;
+    static cl::Buffer*  material_buffer_properties;
     static cl::Buffer* aabb_buffer;
     static cl::Buffer* triangle_buf_alldata;
 

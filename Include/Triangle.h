@@ -7,7 +7,7 @@
 
 //These are set and are important for RenderUtil, they can be changed as long as they are different and both multiple of coarse_render_length in RenderUtil.cpp
 const int SCREEN_WIDTH = 600;
-const int SCREEN_HEIGHT = 464;
+const int SCREEN_HEIGHT = 480;
 
 // Used to describe a triangular surface:
 class Triangle {

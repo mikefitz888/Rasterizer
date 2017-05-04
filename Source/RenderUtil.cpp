@@ -211,18 +211,18 @@ void RENDER::allocateOCLBuffers() {
 
     materials[MaterialType::CARGO_METAL].specularity = 0.75f;
     materials[MaterialType::CARGO_METAL].glossiness = 0.55f;
-    materials[MaterialType::CARGO_METAL].reflectivity = 0.15f;
-    materials[MaterialType::CARGO_METAL].offset_strength = 1.0f;
+    materials[MaterialType::CARGO_METAL].reflectivity = 0.15f;//0.15f;
+    materials[MaterialType::CARGO_METAL].offset_strength = 0.50f;
 
     // Concrete floor
     materials[MaterialType::CONCRETE_FLOOR].diffuse_texture = concrete_diffuse;
     materials[MaterialType::CONCRETE_FLOOR].normalmap_texture = concrete_normal;
     materials[MaterialType::CONCRETE_FLOOR].specular_texture = concrete_specular;
 
-    materials[MaterialType::CONCRETE_FLOOR].specularity = 0.85f;
+    materials[MaterialType::CONCRETE_FLOOR].specularity = 0.90f;
     materials[MaterialType::CONCRETE_FLOOR].glossiness = 1.0f;
     materials[MaterialType::CONCRETE_FLOOR].reflectivity = 0.50f;
-
+   // materials[MaterialType::CONCRETE_FLOOR].offset_strength = 0.5f;
 
     // Allocate Materials buffer
     material_buffer            = new cl::Buffer(*context, CL_MEM_READ_ONLY, sizeof(Colour) * 349526 * 3 * MaterialType::__MATERIALS_MAX);
@@ -1019,6 +1019,21 @@ void RENDER::calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_
 
 void RENDER::calculateReflections(FrameBuffer* in_frame_buffer, glm::vec3 campos, glm::vec3 camdir) {
 
+    // Get dimensions
+    int sw = in_frame_buffer->getWidth();
+    int sh = in_frame_buffer->getHeight();
+
+    // Camera Properties
+    float znear = 0.5f;
+    float zfar = 250.0f;
+    float FOV = 70.0f;
+    float aspect = (float)sw / (float)sh;
+
+    // Construct matrices
+    glm::mat4 VIEW_MATRIX = glm::lookAt(campos, campos + camdir, glm::vec3(0, 1, 0));
+    glm::mat4 PROJECTION_MATRIX = glm::perspective(FOV*glm::pi<float>() / 180.0f, -((float)sw / (float)sh), znear, zfar);
+    glm::mat4 MVP_MATRIX = PROJECTION_MATRIX*VIEW_MATRIX;
+
     // Set kernel args
     kernels["shader_reflections"]->setArg(0, *in_frame_buffer->getGPUBuffer_colour());
     kernels["shader_reflections"]->setArg(1, *in_frame_buffer->getGPUBuffer_fx());
@@ -1030,10 +1045,10 @@ void RENDER::calculateReflections(FrameBuffer* in_frame_buffer, glm::vec3 campos
     kernels["shader_reflections"]->setArg(6, *cubemap->getGPUPtr());
     kernels["shader_reflections"]->setArg(7, sizeof(cl_float) * 3, &campos);
     kernels["shader_reflections"]->setArg(8, sizeof(cl_float) * 3, &camdir);
-    int sw = in_frame_buffer->getWidth();
-    int sh = in_frame_buffer->getHeight();
+
     kernels["shader_reflections"]->setArg(9, sizeof(int), &sw);
     kernels["shader_reflections"]->setArg(10, sizeof(int), &sh);
+    kernels["shader_reflections"]->setArg(11, sizeof(cl_float) * 16, glm::value_ptr(MVP_MATRIX));
 
     // Enqueue kernel
     const cl::NDRange screen = cl::NDRange(sw*sh);

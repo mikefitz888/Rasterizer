@@ -48,7 +48,9 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
                           global Colour* material_textures,
                           global MaterialProperties* material_properties,
                           int screen_width, 
-                          int screen_height){
+                          int screen_height/*,
+                          global Colour* skybox,
+                          fvec3 campos*/){
 
     uint id = get_global_id(0);
 
@@ -68,6 +70,11 @@ kernel void fragment_main(global FragmentColour* fragment_buffer_col,
     
 
     if (fragTdata.depth == 0) {
+
+        // Sample skybox
+
+
+        // ... /// ...
         fragCol.r = 0;
         fragCol.g = 0;
         fragCol.b = 0;

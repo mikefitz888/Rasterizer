@@ -338,7 +338,7 @@ void Update()
     }
 
     // Camera controls
-    float cam_speed = 0.75f;
+    float cam_speed = 0.35f;
     if (keystate[SDLK_w]) {
         // Move camera forward
         campos += camdir * cam_speed;
@@ -372,7 +372,7 @@ void Update()
     }
 
     // Smooth camera
-    camposs += (campos - camposs)*0.30f;
+    camposs += (campos - camposs)*0.12f;
 
 	// Compute frame time:
 	int t2 = SDL_GetTicks();

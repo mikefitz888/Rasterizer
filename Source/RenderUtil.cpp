@@ -211,8 +211,8 @@ void RENDER::allocateOCLBuffers() {
 
     materials[MaterialType::CARGO_METAL].specularity = 0.75f;
     materials[MaterialType::CARGO_METAL].glossiness = 0.55f;
-    materials[MaterialType::CARGO_METAL].reflectivity = 0.15f;//0.15f;
-    materials[MaterialType::CARGO_METAL].offset_strength = 0.50f;
+    materials[MaterialType::CARGO_METAL].reflectivity = 0.10f;//0.15f;
+    materials[MaterialType::CARGO_METAL].offset_strength = 0.75f;
 
     // Concrete floor
     materials[MaterialType::CONCRETE_FLOOR].diffuse_texture = concrete_diffuse;
@@ -220,8 +220,8 @@ void RENDER::allocateOCLBuffers() {
     materials[MaterialType::CONCRETE_FLOOR].specular_texture = concrete_specular;
 
     materials[MaterialType::CONCRETE_FLOOR].specularity = 0.90f;
-    materials[MaterialType::CONCRETE_FLOOR].glossiness = 1.0f;
-    materials[MaterialType::CONCRETE_FLOOR].reflectivity = 0.50f;
+    materials[MaterialType::CONCRETE_FLOOR].glossiness = 0.90f;
+    materials[MaterialType::CONCRETE_FLOOR].reflectivity = 0.35f;
    // materials[MaterialType::CONCRETE_FLOOR].offset_strength = 0.5f;
 
     // Allocate Materials buffer

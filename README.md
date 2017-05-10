@@ -1,6 +1,6 @@
 # GPU-Accelerated Software Rasterizer
 [Video Demonstration](https://www.youtube.com/watch?v=yXUcj-AIQ24)
-
+![alt text](preview.png "Preview")
 ### Features
 * OpenCL GPU Shading
   * Perspective Correct Interpolation

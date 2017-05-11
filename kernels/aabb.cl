@@ -20,7 +20,7 @@ kernel void aabb(global Fragment* const fragment_buffer, global AABB* const AABB
 
     //Find Task
     size_t max_attempts = 0;
-    while (max_attempts < 32) {
+    while (max_attempts < 320) {
         if (guess->offset > aabb_pixel_id) {
             guess--;
         }

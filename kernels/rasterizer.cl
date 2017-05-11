@@ -1,5 +1,8 @@
 #pragma OPENCL EXTENSION cl_khr_byte_addressable_store : enable
-
+/*
+    ! OUT OF DATE ! 
+    TRIPLET NEEDS TO BE UPDATED TO USE THIS KERNEL
+*/
 typedef struct __attribute__((packed, aligned(4))) {
     uchar r, g, b, a;
     uint triangle_id;

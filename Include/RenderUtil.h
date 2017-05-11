@@ -34,16 +34,16 @@ struct triplet {
     //glm::vec3 face_normal, n0, n1, n2;
     unsigned int id;
     inline unsigned int minY() const { return std::min(std::min(v0.i.y, v1.i.y), v2.i.y); }
-    inline bool intersections(int y, unsigned int& const c0, unsigned int& const c1) const {
-        std::vector<glm::u32vec3> above;
-        std::vector<glm::u32vec3> below;
+    inline bool intersections(const int y, unsigned int& const c0, unsigned int& const c1) const {
+        std::vector< std::reference_wrapper<const cl_int3> > above;
+        std::vector< std::reference_wrapper<const cl_int3> > below;
         std::vector<int> intersect_x;
-
-        v0.i.y < y ? below.push_back(v0.i) : above.push_back(v0.i);
-        v1.i.y < y ? below.push_back(v1.i) : above.push_back(v1.i);
-        v2.i.y < y ? below.push_back(v2.i) : above.push_back(v2.i);
-        for (auto& a : above) {
-            for (auto& b : below) {
+        
+        v0.i.y < y ? below.emplace_back(v0.i) : above.emplace_back(v0.i);
+        v1.i.y < y ? below.emplace_back(v1.i) : above.emplace_back(v1.i);
+        v2.i.y < y ? below.emplace_back(v2.i) : above.emplace_back(v2.i);
+        for (const cl_int3& a : above) {
+            for (const cl_int3& b : below) {
                 int c = b.x + (a.x - b.x) * (y - b.y) / (a.y - b.y);
                 intersect_x.push_back(c);
             }

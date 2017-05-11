@@ -1,51 +1,70 @@
 #pragma OPENCL EXTENSION cl_khr_byte_addressable_store : enable
+#include "kernels/Utility/Matrix.cl"
 
-//#define SCREEN_WIDTH 500 //For testing compilation with Nsight, actually provided by c++ program
-
-//#define SCREEN_HEIGHT 500
-
-typedef struct {
-    float x, y, z;
-} fvec3;
-
-typedef struct {
-    uint x, y;
-    float z;
-} ivec3;
-
-typedef union {
-    float3 f;
-    int3 i;
-} ufvec3;
-
-typedef struct __attribute__((packed)) {
-    ufvec3 v0, v1, v2;
-    uint id;
-} triplet;
-
-kernel void projection(global triplet* const wst, global triplet* /*const*/ sst, const float3 campos) { //world-space triangle, screen-space triangles, camera-position
-
+kernel void projection(global triplet* wst, global triplet* sst, mat4 VIEW_MATRIX, mat4 PROJECTION_MATRIX, mat4 CLIP_MATRIX, float screen_width, float screen_height) { //world-space triangle, screen-space triangles, camera-position
     uint id = get_global_id(0);
-
-    triplet s; /*= sst[id];*/
     triplet t = wst[id];
+    triplet s;
+    //global triplet* t = &wst[id];
 
-    //triplet now consists of float3 and int3 so vector instructions can be used
-    s.v0.i.x = (int)(((t.v0.f.x - campos.x) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
-    s.v0.i.y = (int)(((t.v0.f.y - campos.y) / (t.v0.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-    s.v0.i.z = distance(t.v0.f, campos);
-    //printf("%f %f %f => %d %d\n", t->v0.f.x, t->v0.f.y, t->v0.f.z, s->v0.i.x, s->v0.i.y);
+    // World pos
+    fvec4 pos_0 = set4(t.v0.f.x, t.v0.f.y, t.v0.f.z, 1);
+    fvec4 pos_1 = set4(t.v1.f.x, t.v1.f.y, t.v1.f.z, 1);
+    fvec4 pos_2 = set4(t.v2.f.x, t.v2.f.y, t.v2.f.z, 1);
 
-    s.v1.i.x = (int)(((t.v1.f.x - campos.x) / (t.v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
-    s.v1.i.y = (int)(((t.v1.f.y - campos.y) / (t.v1.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-    s.v1.i.z = distance(t.v1.f, campos);
-    //printf("%f %f %f => %d %d\n", t->v1.f.x, t->v1.f.y, t->v1.f.z, s->v1.i.x, s->v1.i.y);
+    // Transform to view position
+    //fvec4 view_pos0, view_pos1, view_pos2;
+    pos_0 = mulf4(pos_0, VIEW_MATRIX);
+    pos_1 = mulf4(pos_1, VIEW_MATRIX);
+    pos_2 = mulf4(pos_2, VIEW_MATRIX);
 
-    s.v2.i.x = (int)(((t.v2.f.x - campos.x) / (t.v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_WIDTH);
-    s.v2.i.y = (int)(((t.v2.f.y - campos.y) / (t.v2.f.z - campos.z) + 1.f) * 0.5f * SCREEN_HEIGHT);
-    s.v2.i.z = distance(t.v2.f, campos);
-    //printf("%f %f %f => %d %d\n", t->v2.f.x, t->v2.f.y, t->v2.f.z, s->v2.i.x, s->v2.i.y);
+    // Project
+    fvec4 proj_pos0, proj_pos1, proj_pos2;
+    proj_pos0 = mulf4(pos_0, PROJECTION_MATRIX);
+    proj_pos1 = mulf4(pos_1, PROJECTION_MATRIX);
+    proj_pos2 = mulf4(pos_2, PROJECTION_MATRIX);
 
-    // Write result to global memory
+    /*proj_pos0.w = (proj_pos0.w == 0.0f) ? 1.0f : proj_pos0.w;
+    proj_pos1.w = (proj_pos1.w == 0.0f) ? 1.0f : proj_pos1.w;
+    proj_pos2.w = (proj_pos2.w == 0.0f) ? 1.0f : proj_pos2.w;*/
+
+    // PERSPECTIVE DIVIDE
+    proj_pos0.x /= proj_pos0.w; proj_pos0.y /= proj_pos0.w; proj_pos0.z /= proj_pos0.w; //proj_pos0.w = 1.0f;
+    proj_pos1.x /= proj_pos1.w; proj_pos1.y /= proj_pos1.w; proj_pos1.z /= proj_pos1.w; //proj_pos1.w = 1.0f;
+    proj_pos2.x /= proj_pos2.w; proj_pos2.y /= proj_pos2.w; proj_pos2.z /= proj_pos2.w; //proj_pos2.w = 1.0f;
+
+
+    // Clipping
+    /*proj_pos0 = mul(proj_pos0, CLIP_MATRIX);
+    proj_pos1 = mul(proj_pos1, CLIP_MATRIX);
+    proj_pos2 = mul(proj_pos2, CLIP_MATRIX);*/
+    proj_pos0.x *= 0.5f; proj_pos0.x += 0.5f;
+    proj_pos0.y *= 0.5f; proj_pos0.y += 0.5f;
+    proj_pos0.x *= screen_width; proj_pos0.y *= screen_height;
+
+    proj_pos1.x *= 0.5f; proj_pos1.x += 0.5f;
+    proj_pos1.y *= 0.5f; proj_pos1.y += 0.5f;
+    proj_pos1.x *= screen_width; proj_pos1.y *= screen_height;
+
+    proj_pos2.x *= 0.5f; proj_pos2.x += 0.5f;
+    proj_pos2.y *= 0.5f; proj_pos2.y += 0.5f;
+    proj_pos2.x *= screen_width; proj_pos2.y *= screen_height;
+
+    // Collect result
+    s.v0.f.x = proj_pos0.x;
+    s.v0.f.y = proj_pos0.y;
+    s.v0.f.z = -pos_0.z; // Use view instead of projected z for depth as it equates to actual distance from camera, rather than re-scaled
+    s.v0.f.w = proj_pos0.w;
+
+    s.v1.f.x = proj_pos1.x;
+    s.v1.f.y = proj_pos1.y;
+    s.v1.f.z = -pos_1.z;
+    s.v0.f.w = proj_pos1.w;
+
+    s.v2.f.x = proj_pos2.x;
+    s.v2.f.y = proj_pos2.y;
+    s.v2.f.z = -pos_2.z;
+    s.v2.f.w = proj_pos2.w;
+
     sst[id] = s;
 }

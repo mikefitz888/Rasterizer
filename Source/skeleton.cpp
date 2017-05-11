@@ -7,7 +7,9 @@
 #include <math.h>
 #undef size_t
 #include <SDL.h>
+#include <SDL_video.h>
 #include "../Include/SDLauxiliary.h"
+#include <glm/gtx/rotate_vector.hpp>
 #undef main
 #include "../Include/RenderUtil.h"
 
@@ -43,7 +45,19 @@ using glm::mat3;
 SDL_Surface* screen;
 int t;
 glm::vec3 campos(0.0, 0.0, -3.0);
+glm::vec3 camposs = campos;
+glm::vec3 camdir(0.0f, 0.0f, 1.0f);
+
+glm::vec3 sunlight_pos(-26.256, -33.5917, 19.1776);
+glm::vec3 sunlight_dir(0.64513, 0.692729, -0.322388);
+
+glm::vec3 plight_pos(0.0f, -1.0f, 0.0f);
 bool running = true;
+
+float yaw = 0.0f, pitch = 0.0f;
+float yaws = 0.0f, pitchs = 0.0f;
+bool mouse_look_enabled = false;
+bool p_pressed = false;
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
@@ -53,9 +67,10 @@ void Draw(model::Scene& scene);
 glm::vec2 project2D(glm::vec3 point);
 void Interpolate(glm::ivec2 a, glm::ivec2 b, vector<glm::ivec2>& result);
 
+
 int main( int argc, char* argv[] )
 {
-
+    
 	screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT );
 	t = SDL_GetTicks();	// Set start value for timer.    
     
@@ -65,11 +80,24 @@ int main( int argc, char* argv[] )
     LoadTestModel(model);
 
     model::Scene scene;
-   // scene.addTriangles(model);
+    //scene.addTriangles(model);p
     
-    //RENDER::addTriangle(scene.getTrianglesRef()[0]);
-    model::Model m("sphere.obj");
+    // LOAD TRAINSTATION MODEL AND SET MATERIAL ID
+
+    // Trainstation
+    model::Model m("trainstation.obj");
+    m.setActiveMaterial(MaterialType::TILED_FLOOR);
     scene.addModel(&m);
+
+    // Cargo
+    model::Model mcargo("cargo_containers.obj");
+    mcargo.setActiveMaterial(MaterialType::CARGO_METAL);
+    scene.addModel(&mcargo);
+
+    // Concrete
+    model::Model mconcrete("concrete.obj");
+    mconcrete.setActiveMaterial(MaterialType::CONCRETE_FLOOR);
+    scene.addModel(&mconcrete);
 
     if( scene.getTrianglesRef().size() == 0){
         printf("There are no triangles!");
@@ -82,23 +110,131 @@ int main( int argc, char* argv[] )
 
     RENDER::initialize(); //Triangles must be loaded to RENDER before this is called; "void RENDER::addTriangle(Triangle& triangle)"
     
-    Pixel* frame_buffer = new Pixel[SCREEN_WIDTH * SCREEN_HEIGHT];
+    // Generate a few buffers to store results in
+    FrameBuffer* frame_buffer  = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
+    FrameBuffer* ssao_buffer   = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
+    FrameBuffer* shadow_buffer = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
+   // FrameBuffer* lighting_buffer = new FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT, RENDER::getContext());
+
+    // Generate SSAO Kernel
+    int sample_count = 96;
+    RENDER::buildSSAOSampleKernel(sample_count);
+
+    // Generate a buffer to store lighting in
+    const int LIGHTMAP_WIDTH = 2048;
+    const int LIGHTMAP_HEIGHT = 2048;
+    FrameBuffer* lightmap_buffer = new FrameBuffer(LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, RENDER::getContext());
+
+    // Render shadowmap
+   /* lightmap_buffer->clear();
+    RENDER::renderFrame(lightmap_buffer, sunlight_pos, sunlight_dir);
+    lightmap_buffer->saveBMP("lightmap.bmp");*/
     
-    
+    bool pressed = false;
 	while( NoQuitMessageSDL() && running )
 	{
 		Update(); 
-        RENDER::renderFrame(frame_buffer, campos);
+
+        clock_t b = clock();
+
+        // Render main frame
+        //RENDER::renderFrame(lightmap_buffer, camposs, camdir);
+        RENDER::renderFrame(frame_buffer, camposs, camdir);
+
+        // TEMP: Press Space to render light buffer
+        Uint8* keystate = SDL_GetKeyState(0);
+        if (keystate[SDLK_SPACE] && !pressed) {
+            
+            // Clear lightmap
+            lightmap_buffer->clear();
+
+            // Store position
+            sunlight_pos = camposs;
+            sunlight_dir = camdir;
+
+            // Render lighting
+            RENDER::renderFrame(lightmap_buffer, sunlight_pos, sunlight_dir);
+            lightmap_buffer->saveBMP("lightmap.bmp");
+            pressed = true;
+
+            std::cout << "lightpos: " << sunlight_pos.x << " " << sunlight_pos.y << " " << sunlight_pos.z << std::endl;
+            std::cout << "lightdir: " << sunlight_dir.x << " " << sunlight_dir.y << " " << sunlight_dir.z << std::endl;
+        } else {
+            pressed = false;
+        }
+
+        // Render Shadow buffer
+        RENDER::calculateShadows(frame_buffer, lightmap_buffer, shadow_buffer, sunlight_pos, sunlight_dir, camposs);
+
+        // Calculate lighting
+       // for (int i = 0; i < 10; i++) {
+            RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, camdir, plight_pos, glm::vec3(1.0f, 0.5f, 0.5f), 5.0f, 0.5f, 128.0f);
+            //RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, camdir, camposs, glm::vec3(0.5f, 1.0f, 0.5f), 20.0f, 0.5f, 128.0f);
+           /* RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, glm::vec3(-10.f, -10.0f, 1.0f), glm::vec3(1.0f, 0.5f, 0.5f), 20.0f, 0.5f, 128.0f);
+            RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, glm::vec3(10.f, -10.0f, 1.0f), glm::vec3(1.0f, 0.5f, 0.5f), 20.0f, 0.5f, 128.0f);
+            RENDER::calculatePointLight(frame_buffer, shadow_buffer, camposs, glm::vec3(-10.f, 10.0f, 1.0f), glm::vec3(1.0f, 0.5f, 0.5f), 20.0f, 0.5f, 128.0f);*/
+    //    }
+
+        // Render SSAO buffer
+        RENDER::calculateSSAO(frame_buffer, ssao_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, camposs, camdir);
+       
+
+
+        // Accumulate results on GPU
+        RENDER::accumulateBuffers(frame_buffer, ssao_buffer, shadow_buffer, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+        // Calculate reflections
+        RENDER::calculateReflections(frame_buffer, camposs, camdir);
+
+        // TEMP: Copy back lighting buffer
+        frame_buffer->transferGPUtoCPU_Colour();
+        /*ssao_buffer->transferGPUtoCPU_Colour();
+        shadow_buffer->transferGPUtoCPU_Colour();*/
+
+        clock_t e = clock();
+
+        double elapsed_secs = 1000 * double(e - b) / CLOCKS_PER_SEC;
+        if(VERBOSE) std::cout << "FULL FRAME RASTER: " << elapsed_secs << "ms" << std::endl;
+        
         
         if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
 #pragma omp parallel for
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             for (int y = 0; y < SCREEN_HEIGHT; y++) {
-                Pixel& p = frame_buffer[x + y * SCREEN_WIDTH];
+                //PixelColour& p = ssao_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];//frame_buffer[x + y * SCREEN_WIDTH];
+                PixelColour& p2 = frame_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];
+                //PixelColour& p3 = shadow_buffer->getCPUBuffer_colour()[x + y * SCREEN_WIDTH];
                 
-                PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
-                p = {}; //C++11 method of clearing struct (Pixel in this case, this resets all values so maybe be careful)
+                float r, g, b;
+                r = (float)p2.r;
+                g = (float)p2.g;
+                b = (float)p2.b;
+
+                // TEMP: multiply by shadow factor
+           /*     r *= (float)p3.r/255.0f;
+                g *= (float)p3.g / 255.0f;
+                b *= (float)p3.b / 255.0f;
+
+                // Add specular component
+                r += p3.a;
+                g += p3.a;
+                b += p3.a;
+
+                // Apply SSAO
+                r *= (float)p.r / 255.0f;
+                g *= (float)p.g / 255.0f;
+                b *= (float)p.b / 255.0f;*/
+
+                Uint32* a = (Uint32*)screen->pixels + y*screen->pitch / 4 + x;
+               // *a = SDL_MapRGB(screen->format, ((float)p.r/255.0f*(float)p2.r/255.0f)*255, ((float)p.g/255.0f*(float)p2.g/255.0f) * 255, ((float)p.b/255.0f*(float)p2.b/255.0f)* 255);
+                //*a = SDL_MapRGB(screen->format, p.r, p.g, p.b);
+                *a = SDL_MapRGB(screen->format, glm::clamp((int)r, 0, 255), glm::clamp((int)g, 0, 255), glm::clamp((int)b, 0, 255));
+                //PutPixelSDL(screen, x, y, glm::vec3(p.r, p.g, p.b));
+                //*a = SDL_MapRGB(screen->format, glm::clamp((int)p3.r, 0, 255), glm::clamp((int)p3.g, 0, 255), glm::clamp((int)p3.b, 0, 255));
+                // Clear
+                frame_buffer->getCPUBuffer_tdata()[x + y * SCREEN_WIDTH].depth = 0;
+
             }
         }
 
@@ -113,7 +249,10 @@ int main( int argc, char* argv[] )
     
 
     RENDER::release();
-    delete[] frame_buffer;
+    delete frame_buffer;
+    delete ssao_buffer;
+    delete lightmap_buffer;
+    //delete lighting_buffer;
 
 	SDL_SaveBMP( screen, "screenshot.bmp" );
 	return 0;
@@ -122,32 +261,130 @@ int main( int argc, char* argv[] )
 void Update()
 {
     Uint8* keystate = SDL_GetKeyState(0);
-    if (keystate[SDLK_UP]) {
+    /*if (keystate[SDLK_UP]) {
         // Move camera forward
-        campos.z += 0.015f;
+        campos.z += 0.080f;
     }
     if (keystate[SDLK_DOWN]) {
         // Move camera backward
-        campos.z -= 0.015f;
+        campos.z -= 0.080f;
     }
     if (keystate[SDLK_LEFT]) {
         // Move camera to the left
-        campos.x -= 0.015f;
+        campos.x -= 0.080f;
     }
     if (keystate[SDLK_RIGHT]) {
         // Move 
-        campos.x += 0.015f;
+        campos.x += 0.080f;
     }
+
+    if (keystate[SDLK_PAGEUP]) {
+        // Move camera to the left
+        campos.y -= 0.080f;
+    }
+    if (keystate[SDLK_PAGEDOWN]) {
+        // Move 
+        campos.y += 0.080f;
+    }*/
+    
 
     if (keystate[SDLK_ESCAPE]) {
         running = false;
     }
 
+    if (keystate[SDLK_p] && !p_pressed) {
+        mouse_look_enabled = !mouse_look_enabled;
+        p_pressed = true;
+    }
+    if (!keystate[SDLK_p]) {
+        p_pressed = false;
+    }
+    if (keystate[SDLK_l]) {
+        plight_pos = camposs;
+    }
+
+    if (mouse_look_enabled) {
+        // Mouse look
+        int mouse_x, mouse_y;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+
+        int dx, dy;
+        dx = mouse_x - SCREEN_WIDTH/2;
+        dy = SCREEN_HEIGHT/2 - mouse_y;
+
+        std::cout << "dx: " << dx << std::endl;
+        std::cout << "dy: " << dy << std::endl;
+
+        yaw -= (float)dx*0.005f;
+        pitch -= (float)dy*0.005f;
+
+        yaws += (yaw - yaws)*0.30f;
+        pitchs += (pitch - pitchs)*0.30f;
+
+
+        camdir.x = cos(yaws) * cos(pitchs);
+        camdir.z = sin(yaws) * cos(pitchs);
+        camdir.y = sin(pitchs);
+
+        camdir = glm::normalize(camdir);
+
+        /*camdir = glm::rotateX(camdir, dy*0.001f);
+        camdir = glm::rotateY(camdir, dx*0.001f);
+        camdir = glm::normalize(camdir);*/
+
+
+        // Lock mouse
+        SDL_WarpMouse(SCREEN_WIDTH/2, SCREEN_HEIGHT/2);
+    }
+
+    // Camera controls
+    float cam_speed = 0.35f;
+    if (keystate[SDLK_w]) {
+        // Move camera forward
+        campos += camdir * cam_speed;
+    }
+    if (keystate[SDLK_s]) {
+        // Move camera backward
+        campos -= camdir * cam_speed;
+    }
+    if (keystate[SDLK_a]) {
+        // Move camera to the left
+        glm::vec3 rot = glm::rotateY(camdir, glm::pi<float>() / 2);
+        rot.y = 0.0f;
+        rot = glm::normalize(rot);
+        campos -= rot * cam_speed;
+    }
+    if (keystate[SDLK_d]) {
+        // Move camera to the right
+        glm::vec3 rot = glm::rotateY(camdir, glm::pi<float>() / 2);
+        rot.y = 0.0f;
+        rot = glm::normalize(rot);
+        campos += rot * cam_speed;
+    }
+
+    if (keystate[SDLK_e]) {
+        // Move camera to the left
+        campos.y += cam_speed;
+    }
+    if (keystate[SDLK_q]) {
+        // Move 
+        campos.y -= cam_speed;
+    }
+
+    // Smooth camera
+    camposs += (campos - camposs)*0.12f;
+
 	// Compute frame time:
 	int t2 = SDL_GetTicks();
 	float dt = float(t2-t);
 	t = t2;
-	cout << "Render time: " << dt << " ms." << endl;
+    if (VERBOSE) {
+        cout << "Render time: " << dt << " ms." << endl;
+        std::cout << "-------------------------------------------" << std::endl;
+    }
+    else {
+        cout << "Render time: " << dt << " ms.          \r";
+    }
 }
 
 void Draw(model::Scene& scene)

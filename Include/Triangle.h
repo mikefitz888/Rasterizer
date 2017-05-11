@@ -20,14 +20,17 @@ public:
 
 	//Normals
 	glm::vec3 n0, n1, n2;
+    
 
 	//Optional Parameters
-
 	glm::vec3 normal;
 	glm::vec3 color;
     float transparency = 1.0;
 
-	
+    // Material
+    int material_id = 0;
+
+    inline Triangle() {};
 
 	inline Triangle(glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
 					glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2,
@@ -65,6 +68,8 @@ public:
 		**	Points in triangle: 0 < u, 0 < v, u+v < 1
 		*/
 		normal = glm::normalize(glm::cross(e2, e1));
+        
+
 	}
 
 	/*
@@ -89,6 +94,14 @@ public:
 		barycentric_coordinates.z = glm::length(glm::cross(factorA, factorB)) / area;
 		return barycentric_coordinates;
 	}
+
+    inline void setMaterialID(int id) {
+        this->material_id = id;
+    }
+
+    inline int getMaterialID() {
+        return this->material_id;
+    }
 };
 
 struct Intersection {

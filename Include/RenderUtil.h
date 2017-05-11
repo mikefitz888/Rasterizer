@@ -1,6 +1,6 @@
 #ifndef RENDER_UTIL_H
 #define RENDER_UTIL_H
-
+#define VERBOSE false
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.hpp>
 #include <map>
@@ -10,17 +10,28 @@
 #include <string>
 #include <fstream>
 #include <streambuf>
-#include <algorithm>
-#include "fragment.h"
+//#include <algorithm>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/random.hpp>
+#include <iostream>
+#include <fstream>
+#include <ctime>
+#include <cstring>
+#include "textures.h"
 
-union ufvec3 {
-    cl_float3 f;
-    cl_int3 i;
-    inline ufvec3() {}
+// Materials
+enum MaterialType : unsigned int { TILED_FLOOR, CARGO_METAL, SUBWAY_POSTER, CONCRETE_FLOOR, __MATERIALS_MAX };
+
+union ufvec4 {
+    glm::vec4 f;
+    glm::vec4 i;
+    inline ufvec4() {}
 };
 
 struct triplet {
-    ufvec3 v0, v1, v2;
+    ufvec4 v0, v1, v2;
+    //glm::vec3 face_normal, n0, n1, n2;
     unsigned int id;
     inline unsigned int minY() const { return std::min(std::min(v0.i.y, v1.i.y), v2.i.y); }
     inline bool intersections(const int y, unsigned int& const c0, unsigned int& const c1) const {
@@ -46,6 +57,84 @@ struct triplet {
     }
 };
 
+//TODO: move these to a header file for both cpp and opencl
+/*struct Pixel {
+    //Core pixel data
+    uint8_t r, g, b, a;
+    uint32_t triangle_id;
+
+    // Interpolators
+    float va, vb, vc; // Barycentric coordinates
+
+    // Stored information (for effects)
+    float depth;
+    float x, y, z;
+    float nx, ny, nz;
+    float uvx, uvy;
+
+    // Gradient functions
+    float dudx, dvdx, dudy, dvdy;
+};*/
+
+// Split pixel data
+struct PixelColour {
+    uint8_t r, g, b, a;
+};
+struct PixelTData {
+    uint32_t triangle_id;
+    float va, vb, vc;
+    float depth;
+};
+struct PixelWPos {
+    float x, y, z;
+};
+struct PixelNormal {
+    float nx, ny, nz;
+};
+struct PixelTX {
+    float uvx, uvy;
+    float dudx, dvdx, dudy, dvdy;
+};
+struct PixelFX {
+    float reflection_val, glossiness;
+};
+
+
+struct GPUMaterial {
+
+    // Material properties
+    float specularity = 0.0f;
+    float glossiness = 0.0f;
+    float reflectivity = 0.0f;
+    float offset_strength = 1.0f;
+    float r, g, b;
+};
+
+struct Material {
+    // Textures
+    Texture* diffuse_texture = nullptr;
+    Texture* normalmap_texture = nullptr;
+    Texture* specular_texture = nullptr;
+
+    // Material properties
+    float specularity = 0.0f;
+    float glossiness = 0.0f;
+    float reflectivity = 0.0f;
+    float offset_strength = 1.0f;
+    float r=0.0f, g = 0.0f, b = 0.0f;
+
+    // GPU Material 
+    GPUMaterial gpumaterial;
+
+    // Functions
+    /*Material(Texture* diffuse_texture, Texture* normalmap_texture, Texture* specular_texture,
+             float specularity, float glossiness, float reflectivity, float r, float g, float b );*/
+
+    void prepareGPUMaterial();
+
+};
+
+
 struct AABB {
     int minX, minY, maxX, maxY;
     glm::vec2 v0, v1;
@@ -54,22 +143,75 @@ struct AABB {
     size_t triangle_id, offset;
 };
 
+class FrameBuffer {
+    int width, height;
+    PixelColour* cpu_buffer_colour;
+    PixelTData*  cpu_buffer_tdata;
+    PixelWPos*   cpu_buffer_wpos;
+    PixelNormal* cpu_buffer_normal;
+    PixelTX*     cpu_bufer_tx;
+    PixelFX*     cpu_buffer_fx;
+
+    cl::Buffer* gpu_buffer_colour;
+    cl::Buffer* gpu_buffer_tdata;
+    cl::Buffer* gpu_buffer_wpos;
+    cl::Buffer* gpu_buffer_normal;
+    cl::Buffer* gpu_buffer_tx;
+    cl::Buffer* gpu_buffer_fx;
+
+public:
+    FrameBuffer(int width, int height, const cl::Context *context);
+    ~FrameBuffer();
+
+
+    PixelColour* getCPUBuffer_colour();
+    PixelTData* getCPUBuffer_tdata();
+    PixelWPos*  getCPUBuffer_wpos();
+    PixelNormal* getCPUBuffer_normal();
+    PixelTX* getCPUBuffer_tx();
+    PixelFX* getCPUBuffer_fx();
+
+    cl::Buffer* getGPUBuffer_colour();
+    cl::Buffer* getGPUBuffer_tdata();
+    cl::Buffer* getGPUBuffer_wpos();
+    cl::Buffer* getGPUBuffer_normal();
+    cl::Buffer* getGPUBuffer_tx();
+    cl::Buffer* getGPUBuffer_fx();
+
+    int getWidth();
+    int getHeight();
+    void saveBMP(const std::string filename);
+    void clear();
+    void transferGPUtoCPU_ALL();
+
+    void transferGPUtoCPU_Colour();
+    void transferGPUtoCPU_TData();
+    void transferGPUtoCPU_Wpos();
+    void transferGPUtoCPU_Normal();
+    void transferGPUtoCPU_Tx();
+    void transferGPUtoCPU_Fx();
+};
 
 class RENDER {
     //static Pixel frame_buff[SCREEN_WIDTH * SCREEN_HEIGHT];
-    static cl::Buffer* frame_buff;
+    //static cl::Buffer* ssao_buff;
+    static cl::Buffer* ssao_sample_kernel;
+    static int sample_count;
+    static glm::vec3* ssao_sample_kernel_vals;
     static cl::Buffer* triangle_buff;
     static cl::Buffer* screen_space_buff;
     static cl::Buffer* material_buffer;
+    static cl::Buffer*  material_buffer_properties;
     static cl::Buffer* aabb_buffer;
+    static cl::Buffer* triangle_buf_alldata;
 
     static std::vector<Triangle*> triangle_refs;
     static triplet* triangles;
-    static Material* materials;
+    //static Material* materials;
 
     static cl::Device* device;
     static cl::Context* context;
-    static cl::CommandQueue* queue;
+    
     static std::vector<cl::Program*> programs;
     static std::map<std::string, cl::Kernel*> kernels;
     static AABB* local_aabb_buff;
@@ -95,13 +237,31 @@ class RENDER {
     static void writeTriangles();
 
 public:
-    static void initialize();
+    //static cl::Buffer* frame_buff;
+    static cl::CommandQueue* queue;
 
+    static void initialize();
     static void addTriangle(Triangle& triangle);
 
-    static void renderFrame(Pixel* frame_buffer, glm::vec3 campos);
+    // Main rasterization process
+    static void renderFrame(FrameBuffer* frame_buffer, glm::vec3 campos, glm::vec3 camdir);
+    
+    // Post process
+    static void calculateSSAO(FrameBuffer* in_frame_buffer, FrameBuffer* out_ssao_buffer, int WIDTH, int HEIGHT, glm::vec3 campos, glm::vec3 camdir);
+    static void buildSSAOSampleKernel(int sample_count);
+
+    // Lighting
+    static void calculateShadows(FrameBuffer* in_frame_buffer, FrameBuffer* in_light_buffer, FrameBuffer* out_shadow_buffer, glm::vec3 lightpos, glm::vec3 lightdir, glm::vec3 campos);
+    static void calculatePointLight(FrameBuffer* in_frame_buffer, FrameBuffer* out_lighting_accum, glm::vec3 campos, glm::vec3 camdir, glm::vec3 lightpos, glm::vec3 lightcolour, float light_range, float specularity, float glossiness);
+
+    static void calculateReflections(FrameBuffer* in_frame_buffer, glm::vec3 campos, glm::vec3 camdir);
+
+    // Result accumulation
+    static void accumulateBuffers(FrameBuffer* in_frame_buffer, FrameBuffer* in_ssao_buffer, FrameBuffer* in_shadow_buffer, int WIDTH, int HEIGHT);
+    
 
     static void release();
+    static inline cl::Context* getContext() { return RENDER::context; }
 };
 
 #endif
